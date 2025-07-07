@@ -27,7 +27,7 @@ intents = discord.Intents(messages = True, guilds = True, voice_states = True, m
 
 class ISROBOT(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix="", intents=intents, application_id=APP_ID)
+        super().__init__(command_prefix="µ", intents=intents, application_id=APP_ID)
 
     async def setup_hook(self):
         # Lancer le script database.py pour créer la base de données

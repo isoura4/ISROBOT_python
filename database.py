@@ -29,40 +29,40 @@ def create_database():
     else:
         print("La base de données n'existe pas, elle va être créée.")
     
-        # Créer les tables nécessaires
-        conn = get_db_connection()
-        cursor = conn.cursor()
+    # Créer les tables nécessaires (toujours exécuter cette partie)
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-        # Création de la table des utilisateurs
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                guildId TEXT NOT NULL,
-                userId TEXT NOT NULL,
-                xp REAL DEFAULT 0,
-                level INTEGER DEFAULT 1,
-                messages INTEGER DEFAULT 0,
-                coins REAL DEFAULT 0,
-                corners INTEGER DEFAULT 0,
-                PRIMARY KEY (guildId, userId)
-            )
-        ''')
+    # Création de la table des utilisateurs
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            guildId TEXT NOT NULL,
+            userId TEXT NOT NULL,
+            xp REAL DEFAULT 0,
+            level INTEGER DEFAULT 1,
+            messages INTEGER DEFAULT 0,
+            coins REAL DEFAULT 0,
+            corners INTEGER DEFAULT 0,
+            PRIMARY KEY (guildId, userId)
+        )
+    ''')
 
-        # Création de la table des streamers
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS streamers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                platform TEXT NOT NULL,
-                streamerName TEXT NOT NULL,
-                streamChannelId TEXT,
-                roleId TEXT,
-                announced INTEGER DEFAULT 0,
-                startTime TEXT
-            )
-        ''')
+    # Création de la table des streamers
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS streamers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            platform TEXT NOT NULL,
+            streamerName TEXT NOT NULL,
+            streamChannelId TEXT,
+            roleId TEXT,
+            announced INTEGER DEFAULT 0,
+            startTime TEXT
+        )
+    ''')
 
-        conn.commit()
-        conn.close()
-        print("Base de données et tables créées avec succès.")
+    conn.commit()
+    conn.close()
+    print("Base de données et tables créées avec succès.")
 
 
 if __name__ == "__main__":
