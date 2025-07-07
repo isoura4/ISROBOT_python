@@ -17,7 +17,7 @@ class Ping(commands.Cog):
 
     @app_commands.command(name="ping", description="Répond avec pong!")
     @app_commands.guilds(discord.Object(id=SERVER_ID))
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(administrator=False)
     async def ping(self, interaction: discord.Interaction):
         await interaction.response.send_message("Pong !")
 

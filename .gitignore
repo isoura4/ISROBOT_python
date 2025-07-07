@@ -2,3 +2,6 @@
 discord.log
 database.sqlite3
 test.py
+*.pyc
+__pycache__
+commands/__pycache__
