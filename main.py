@@ -14,6 +14,7 @@ load_dotenv()
 APP_ID = int(os.getenv('app_id', '0'))
 TOKEN = os.getenv('secret_key')
 SERVER_ID = int(os.getenv('server_id', '0'))
+DB_PATH = os.getenv('db_path')
 
 #Parametrage des logs
 logging.basicConfig(filename='discord.log', level=logging.INFO, encoding='utf-8', format='%(asctime)s:%(levelname)s:%(name)s: %(message)s')
@@ -29,10 +30,20 @@ class ISROBOT(commands.Bot):
         super().__init__(command_prefix="", intents=intents, application_id=APP_ID)
 
     async def setup_hook(self):
-        #suprime toutes les commande /
+        # Lancer le script database.py pour créer la base de données
+        print("Initialisation de la base de données...")
+        try:
+            import database
+            database.create_database()
+            print("Base de données initialisée avec succès.")
+        except Exception as e:
+            print(f"Erreur lors de l'initialisation de la base de données: {e}")
+        
+        # Supprimer toutes les commandes /
         self.tree.clear_commands(guild=None)
-        print("Commande existante vidée")
-        #Parcour les fichier contenant des commandes
+        print("Commandes existantes vidées")
+        
+        # Parcourir les fichiers contenant des commandes
         commands_path = Path("commands/")
         for file in commands_path.glob('*.py') :
             if file.name.startswith('_'):

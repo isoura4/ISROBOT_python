@@ -1,3 +1,4 @@
 .env
 discord.log
 database.sqlite3
+test.py
