@@ -51,7 +51,6 @@ def create_database():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS streamers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            platform TEXT NOT NULL,
             streamerName TEXT NOT NULL,
             streamChannelId TEXT,
             roleId TEXT,

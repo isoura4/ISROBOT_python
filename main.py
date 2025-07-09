@@ -3,6 +3,8 @@ import os
 import discord
 import logging
 import random
+import asyncio
+import aiohttp
 from dotenv import load_dotenv
 from discord import Intents, app_commands
 from discord.ext import commands
@@ -29,8 +31,12 @@ intents = discord.Intents(messages = True, guilds = True, voice_states = True, m
 class ISROBOT(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="µ", intents=intents, application_id=APP_ID)
+        self.session = None
 
     async def setup_hook(self):
+        # Créer une session HTTP pour les requêtes API
+        self.session = aiohttp.ClientSession()
+        
         # Lancer le script database.py pour créer la base de données
         print("Initialisation de la base de données...")
         try:
@@ -89,10 +95,71 @@ class ISROBOT(commands.Bot):
             import traceback
             traceback.print_exc()
 
+        # Démarrer la tâche de vérification des streams en arrière-plan
+        self.stream_check_task = self.loop.create_task(self.check_streams_loop())
+
+    async def check_streams_loop(self):
+        """Vérifier périodiquement le statut des streamers."""
+        await self.wait_until_ready()  # Attendre que le bot soit prêt
+        
+        while not self.is_closed():
+            try:
+                from commands.stream import checkTwitchStatus
+                if self.session:
+                    stream_checker = checkTwitchStatus(self.session)
+                    
+                    # Récupérer tous les streamers de la base de données
+                    import sqlite3
+                    conn = sqlite3.connect('database.sqlite3')
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT * FROM streamers")
+                    streamers = cursor.fetchall()
+                    conn.close()
+                    
+                    for streamer in streamers:
+                        try:
+                            # Vérifier si le streamer est en ligne
+                            stream_data = await stream_checker.check_streamer_status(streamer[1])  # streamerName
+                            if stream_data:  # Si des données sont retournées, le streamer est en ligne
+                                # Vérifier si on a déjà annoncé ce stream
+                                if streamer[4] == 0:  # announced = 0
+                                    channel = self.get_channel(int(streamer[2]))  # streamChannelId
+                                    if channel and isinstance(channel, discord.TextChannel):
+                                        from commands.stream import announceStream
+                                        announcer = announceStream(self)
+                                        await announcer.announce(streamer[1], channel)
+                                        
+                                        # Marquer comme annoncé
+                                        conn = sqlite3.connect('database.sqlite3')
+                                        cursor = conn.cursor()
+                                        cursor.execute("UPDATE streamers SET announced = 1 WHERE id = ?", (streamer[0],))
+                                        conn.commit()
+                                        conn.close()
+                            else:
+                                # Le streamer n'est pas en ligne, réinitialiser le statut d'annonce
+                                conn = sqlite3.connect('database.sqlite3')
+                                cursor = conn.cursor()
+                                cursor.execute("UPDATE streamers SET announced = 0 WHERE id = ?", (streamer[0],))
+                                conn.commit()
+                                conn.close()
+                        except Exception as e:
+                            print(f"Erreur lors de la vérification du streamer {streamer[1]}: {e}")
+                            
+            except Exception as e:
+                print(f"Erreur lors de la vérification des streams: {e}")
+            
+            # Attendre 5 minutes avant la prochaine vérification
+            await asyncio.sleep(300)
+
     async def on_message(self, message: discord.Message):
         # Ignorer les messages des bots
         if message.author.bot:
             return
+        
+        # Vérifier que le message est dans un serveur
+        if not message.guild:
+            return
+            
         # Quand un message est envoyé dans le salon compteur du minijeux comparé avec le dernier chiffre
         import sqlite3
         from database import get_db_connection
@@ -116,6 +183,7 @@ class ISROBOT(commands.Bot):
                                 (str(message.guild.id),))
                     conn.commit()
                     await message.channel.send("Le compteur a été réinitialisé.")
+                    conn.close()
                     return
                 if str(int(message.content)) == str(result['count'] + 1):
                     await message.add_reaction('✅')
@@ -123,6 +191,7 @@ class ISROBOT(commands.Bot):
                     cursor.execute('UPDATE counter_game SET count = ?, lastUserId = ? WHERE guildId = ? AND channelId = ?',
                                 (count, str(message.author.id), str(message.guild.id), str(message.channel.id)))
                     conn.commit()
+                    conn.close()
                     return
                 if str(int(message.content)) == str(result['count']):
                     await message.add_reaction('❌')
@@ -133,10 +202,23 @@ class ISROBOT(commands.Bot):
                                 (str(message.guild.id),))
                     conn.commit()
                     await message.channel.send("Le compteur a été réinitialisé.")
+                    conn.close()
                     return
             else:
+                conn.close()
                 return
+        else:
+            conn.close()
 
+    async def close(self):
+        """Fermer proprement la session HTTP quand le bot se ferme."""
+        # Arrêter la tâche de vérification des streams
+        if hasattr(self, 'stream_check_task'):
+            self.stream_check_task.cancel()
+            
+        if self.session:
+            await self.session.close()
+        await super().close()
 
     async def on_ready(self):
         print('Ready !')
