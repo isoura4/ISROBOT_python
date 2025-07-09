@@ -120,14 +120,18 @@ class ISROBOT(commands.Bot):
                         try:
                             # Vérifier si le streamer est en ligne
                             stream_data = await stream_checker.check_streamer_status(streamer[1])  # streamerName
-                            if stream_data:  # Si des données sont retournées, le streamer est en ligne
+                            if stream_data and len(stream_data) > 0:  # Si des données sont retournées, le streamer est en ligne
                                 # Vérifier si on a déjà annoncé ce stream
                                 if streamer[4] == 0:  # announced = 0
                                     channel = self.get_channel(int(streamer[2]))  # streamChannelId
                                     if channel and isinstance(channel, discord.TextChannel):
                                         from commands.stream import announceStream
                                         announcer = announceStream(self)
-                                        await announcer.announce(streamer[1], channel)
+                                        # stream_data est une liste, on prend le premier élément
+                                        stream_info = stream_data[0]
+                                        stream_title = stream_info.get('title', 'Stream en direct')
+                                        category = stream_info.get('game_name', 'Inconnu')
+                                        await announcer.announce(streamer[1], channel, stream_title, category)
                                         
                                         # Marquer comme annoncé
                                         conn = sqlite3.connect('database.sqlite3')

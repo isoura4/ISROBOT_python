@@ -22,7 +22,7 @@ class Stream(commands.Cog):
     @app_commands.command(name="stream_add", description="Ajouter un streamer à la liste des streamers.")
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.default_permissions(administrator=True)
-    async def stream(self, interaction: discord.Interaction, streamer_name: str, channel: discord.TextChannel):
+    async def stream(self, interaction: discord.Interaction, streamer_name: str, channel: discord.TextChannel,):
         # Logique pour ajouter le streamer à la base de données
         if not TWITCH_CLIENT_ID or not TWITCH_CLIENT_SECRET:
             await interaction.response.send_message("Les identifiants Twitch ne sont pas configurés.")
@@ -152,11 +152,14 @@ class announceStream:
         self.bot = bot
 
     # Annonce le début d'un stream dans un salon Discord dans un Embed.
-    async def announce(self, streamer_name: str, channel: discord.TextChannel):
+    # Titre du stream cliquable pour aller sur la chaine twitch
+    # Nom de la chaine Twitch
+    # Catégorie de stream
+    async def announce(self, streamer_name: str, channel: discord.TextChannel, stream_title: str, category: str):
         """Annoncer le début d'un stream dans un salon Discord."""
         embed = discord.Embed(
-            title=f"🔴 {streamer_name} est en live !",
-            description=f"Regardez le stream ici : https://www.twitch.tv/{streamer_name}",
+            title=f"{stream_title}",  # nom du stream cliquable pour aller sur la chaine twitch
+            description=f"**Channel** : {streamer_name} \n**Catégorie** : {category}\n **Regardez le stream ici :** https://www.twitch.tv/{streamer_name}",
             color=discord.Color.purple()
         )
         if streamer_name:
