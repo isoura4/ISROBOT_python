@@ -2,6 +2,7 @@
 import os
 import discord
 import logging
+import random
 from dotenv import load_dotenv
 from discord import Intents, app_commands
 from discord.ext import commands
@@ -70,6 +71,72 @@ class ISROBOT(commands.Bot):
             print(f"Erreur lors de la synchronisation: {e}")
             import traceback
             traceback.print_exc()
+
+        # Vérifie si le minijeux du compteur est configuré
+        try:
+            import database
+            conn = database.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM counter_game WHERE guildId = ?', (str(SERVER_ID),))
+            result = cursor.fetchone()
+            if result:
+                print("Le minijeux du compteur est déjà configuré.")
+            else:
+                print("Le minijeux du compteur n'est pas configuré.")
+            conn.close()
+        except Exception as e:
+            print(f"Erreur lors de la vérification du minijeux du compteur: {e}")
+            import traceback
+            traceback.print_exc()
+
+    async def on_message(self, message: discord.Message):
+        # Ignorer les messages des bots
+        if message.author.bot:
+            return
+        # Quand un message est envoyé dans le salon compteur du minijeux comparé avec le dernier chiffre
+        import sqlite3
+        from database import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM counter_game WHERE guildId = ? AND channelId = ?',
+                       (str(message.guild.id), str(message.channel.id)))
+        result = cursor.fetchone()
+        if result:
+            # Si le message est envoyé dans le salon du minijeux compteur
+            last_user_id = result['lastUserId']
+            last_count = result['count']
+            count = message.content
+            if message.content.isdigit() and not str(message.content).isspace(): # Vérifie si le message est un chiffre
+                if str(message.author.id) == last_user_id:
+                    await message.add_reaction('❌')
+                    await message.channel.send("Vous ne pouvez pas compter deux fois de suite !")
+                    await message.channel.send("On recommence à zéro !")
+                    # Réinitialiser le compteur
+                    cursor.execute('UPDATE counter_game SET count = 0, lastUserId = NULL WHERE guildId = ?',
+                                (str(message.guild.id),))
+                    conn.commit()
+                    await message.channel.send("Le compteur a été réinitialisé.")
+                    return
+                if str(int(message.content)) == str(result['count'] + 1):
+                    await message.add_reaction('✅')
+                    # Mettre à jour le compteur
+                    cursor.execute('UPDATE counter_game SET count = ?, lastUserId = ? WHERE guildId = ? AND channelId = ?',
+                                (count, str(message.author.id), str(message.guild.id), str(message.channel.id)))
+                    conn.commit()
+                    return
+                if str(int(message.content)) == str(result['count']):
+                    await message.add_reaction('❌')
+                    await message.channel.send("Vous avez mis le même chiffre ! Le bon chiffre était " + str(last_count + 1))
+                    await message.channel.send("On recommence à zéro !")
+                    # Réinitialiser le compteur
+                    cursor.execute('UPDATE counter_game SET count = 0, lastUserId = NULL WHERE guildId = ?',
+                                (str(message.guild.id),))
+                    conn.commit()
+                    await message.channel.send("Le compteur a été réinitialisé.")
+                    return
+            else:
+                return
+
 
     async def on_ready(self):
         print('Ready !')

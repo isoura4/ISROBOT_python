@@ -60,6 +60,19 @@ def create_database():
         )
     ''')
 
+    # Création de la table pour le jeu du compteur
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS counter_game (
+            guildId TEXT NOT NULL,
+            channelId TEXT NOT NULL,
+            messageId TEXT DEFAULT '',
+            userId TEXT NOT NULL,
+            lastUserId TEXT DEFAULT '0',
+            count INTEGER DEFAULT 0,
+            PRIMARY KEY (guildId, channelId)
+        )
+    ''')
+
     conn.commit()
     conn.close()
     print("Base de données et tables créées avec succès.")
