@@ -234,6 +234,7 @@ class ISROBOT(commands.Bot):
         print('Ready !')
         if self.user:
             print(f'Connecté en tant que {self.user} (ID: {self.user.id})')
+            await self.change_presence(activity=discord.CustomActivity(name="Prêt à aider !", emoji="🤖"))
         else:
             print('Erreur: Utilisateur non défini')
 
