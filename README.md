@@ -1,6 +1,6 @@
 # ISROBOT - Discord Bot
 
-A feature-rich Discord bot built with Python and discord.py, offering various interactive commands, mini-games, and Twitch stream notifications.
+A feature-rich Discord bot built with Python and discord.py, offering various interactive commands, mini-games and Twitch stream notifications.
 
 ## Features
 
@@ -13,7 +13,7 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 - **Leaderboard**: View server rankings based on levels and XP
 - **Profile Command**: Check your or another user's level, XP, and message count
 
-### 🎥 Twitch Integration
+### �🎥 Twitch Integration
 - **Stream Notifications**: Automatically announce when configured streamers go live
 - **Stream Management**: Add streamers to watch list with custom notification channels
 - **Rich Embeds**: Beautiful stream announcements with thumbnails and stream details
@@ -44,10 +44,15 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 
 2. **Install dependencies**
    ```bash
-   pip install discord.py python-dotenv aiohttp
+   pip install -r requirements.txt
    ```
 
-3. **Create environment file**
+3. **Install FFmpeg** (required for music functionality)
+   - **Ubuntu/Debian**: `sudo apt install ffmpeg`
+   - **macOS**: `brew install ffmpeg`
+   - **Windows**: Download from [FFmpeg official site](https://ffmpeg.org/download.html)
+
+4. **Create environment file**
    Create a `.env` file in the root directory with the following variables:
    ```env
    app_id=YOUR_BOT_APPLICATION_ID
@@ -58,7 +63,7 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
    twitch_client_secret=YOUR_TWITCH_CLIENT_SECRET
    ```
 
-4. **Run the bot**
+5. **Run the bot**
    ```bash
    python main.py
    ```
@@ -70,13 +75,14 @@ ISROBOT_python/
 ├── main.py                 # Main bot file and event handlers
 ├── database.py             # Database setup and connection utilities
 ├── README.md               # This file
-├── requirements.txt        # Python dependencies (create if needed)
+├── requirements.txt        # Python dependencies
 ├── .env                    # Environment variables (create this)
 ├── database.sqlite3        # SQLite database (auto-created)
 ├── discord.log             # Bot logs (auto-created)
 └── commands/               # Bot command modules
     ├── coinflip.py         # Coin flip command
     ├── count.py            # Counter game setup
+    ├── music.py            # Music playback functionality
     ├── ping.py             # Basic ping command
     ├── ping_bot.py         # Bot latency command
     ├── reload.py           # Hot-reload extensions
@@ -90,6 +96,7 @@ ISROBOT_python/
 - `/ping` - Responds with "Pong!"
 - `/ping_bot` - Shows bot latency in milliseconds
 - `/coinflip` - Flips a coin and shows the result
+
 
 ### XP System Commands
 - `/level [user]` - Display level information for yourself or another user
@@ -124,6 +131,8 @@ The bot uses SQLite with the following tables:
 - Embed Links
 - Add Reactions
 - Read Message History
+- Connect (for voice channels)
+- Speak (for voice channels)
 
 ### Twitch API Setup
 1. Create an application at [Twitch Developers](https://dev.twitch.tv/)
@@ -147,6 +156,14 @@ Users must count sequentially starting from 1. Rules:
 - Checks every 5 minutes for live streams
 - Prevents duplicate notifications
 - Rich embeds with stream thumbnails and details
+
+## Dependencies
+
+The bot requires the following Python packages:
+- `discord.py>=2.3.0` - Discord API wrapper
+- `python-dotenv>=1.0.0` - Environment variable management
+- `aiohttp>=3.8.0` - HTTP client for API requests
+- `PyNaCl>=1.5.0` - Voice functionality support
 
 ## Logging
 

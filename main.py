@@ -22,8 +22,14 @@ DB_PATH = os.getenv('db_path')
 #Parametrage des logs
 logging.basicConfig(filename='discord.log', level=logging.INFO, encoding='utf-8', format='%(asctime)s:%(levelname)s:%(name)s: %(message)s')
 
-# Configuration des intents
-intents = discord.Intents(messages = True, guilds = True, voice_states = True, message_content = True)
+# Configuration des intents - Optimisé pour réduire la charge WebSocket
+intents = discord.Intents.default()
+intents.message_content = True
+intents.voice_states = True
+# Désactiver les intents non nécessaires pour réduire la charge
+intents.presences = False
+intents.typing = False
+intents.reactions = False
 
 
 # --- Événements du bot ---
@@ -228,6 +234,7 @@ class ISROBOT(commands.Bot):
         print('Ready !')
         if self.user:
             print(f'Connecté en tant que {self.user} (ID: {self.user.id})')
+            await self.change_presence(activity=discord.CustomActivity(name="Prêt à aider !", emoji="🤖"))
         else:
             print('Erreur: Utilisateur non défini')
 
