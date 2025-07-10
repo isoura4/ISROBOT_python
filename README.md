@@ -33,7 +33,6 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 - Python 3.8+
 - Discord Bot Token
 - Twitch API credentials (for stream features)
-- FFmpeg (for music functionality)
 
 ### Setup
 
@@ -98,8 +97,6 @@ ISROBOT_python/
 - `/ping_bot` - Shows bot latency in milliseconds
 - `/coinflip` - Flips a coin and shows the result
 
-### Music Commands
-- `/play <lien>` - Play audio from a URL in your current voice channel
 
 ### XP System Commands
 - `/level [user]` - Display level information for yourself or another user
@@ -155,12 +152,6 @@ Users must count sequentially starting from 1. Rules:
 - Level calculation: `floor(sqrt(xp / 125)) + 1`
 - Automatic level-up notifications
 
-### Music System
-- Supports direct URL audio streaming
-- Automatically connects to user's voice channel
-- Requires FFmpeg for audio processing
-- Supports various audio formats
-
 ### Stream Notifications
 - Checks every 5 minutes for live streams
 - Prevents duplicate notifications
@@ -181,15 +172,6 @@ The bot logs important events to `discord.log` including:
 - Error messages
 - Extension loading/reloading
 - Database operations
-
-## Troubleshooting
-
-### Common Issues
-
-1. **PyNaCl Error**: Install with `pip install PyNaCl`
-2. **FFmpeg Error**: Make sure FFmpeg is installed and in your PATH
-3. **Voice Connection Issues**: Ensure bot has proper voice permissions
-4. **Database Errors**: Check if database.sqlite3 has proper permissions
 
 ## Contributing
 
