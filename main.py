@@ -38,6 +38,8 @@ class ISROBOT(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="µ", intents=intents, application_id=APP_ID)
         self.session = None
+        self.voice_xp_tasks = {}
+
 
     async def setup_hook(self):
         # Créer une session HTTP pour les requêtes API
@@ -237,6 +239,7 @@ class ISROBOT(commands.Bot):
             await self.change_presence(activity=discord.CustomActivity(name="Prêt à aider !", emoji="🤖"))
         else:
             print('Erreur: Utilisateur non défini')
+
 
 client = ISROBOT()
 if TOKEN:

@@ -123,11 +123,11 @@ class XPSystem(commands.Cog):
         try:
             result = self.add_user_xp(guild_id, user_id, xp_gain)
             
-            # Si l'utilisateur a level up, envoyer un message
+            # Si l'utilisateur a level up, envoyer un message priver a l'utilisateur
             if result['level_up']:
                 embed = discord.Embed(
                     title="🎉 Level Up !",
-                    description=f"{message.author.mention} a atteint le niveau **{result['new_level']}** !",
+                    description=f"Vous avez atteint le niveau **{result['new_level']}** !",
                     color=discord.Color.gold()
                 )
                 embed.add_field(
@@ -141,7 +141,7 @@ class XPSystem(commands.Cog):
                     inline=True
                 )
                 
-                await message.channel.send(embed=embed, delete_after=10)
+                await message.author.send(embed=embed, silent=True)
                 
         except Exception as e:
             print(f"Erreur lors de l'ajout d'XP pour {message.author}: {e}")
