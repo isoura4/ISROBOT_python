@@ -3,6 +3,7 @@ import discord
 import sqlite3
 import asyncio
 import aiohttp
+from typing import Optional
 from dotenv import load_dotenv
 from discord import app_commands
 from discord.ext import commands
@@ -22,7 +23,7 @@ class Stream(commands.Cog):
     @app_commands.command(name="stream_add", description="Ajouter un streamer à la liste des streamers.")
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.default_permissions(administrator=True)
-    async def stream(self, interaction: discord.Interaction, streamer_name: str, channel: discord.TextChannel,):
+    async def stream(self, interaction: discord.Interaction, streamer_name: str, channel: discord.TextChannel, ping_role: discord.Role = None):
         # Logique pour ajouter le streamer à la base de données
         if not TWITCH_CLIENT_ID or not TWITCH_CLIENT_SECRET:
             await interaction.response.send_message("Les identifiants Twitch ne sont pas configurés.")
@@ -43,11 +44,13 @@ class Stream(commands.Cog):
                 # Ajouter le streamer et le channel id sélectionné à la base de données
                 conn = sqlite3.connect('database.sqlite3')
                 cursor = conn.cursor()
-                cursor.execute("INSERT INTO streamers (streamerName, streamChannelId) VALUES (?, ?)", (streamer_name, str(channel.id)))
+                cursor.execute("INSERT INTO streamers (streamerName, streamChannelId, roleId) VALUES (?, ?, ?)", (streamer_name, str(channel.id), str(ping_role.id) if ping_role else None))
                 conn.commit()
                 conn.close()
                 # Envoyer un message de confirmation
                 await interaction.response.send_message(f"Streamer ajouté : {streamer_name} dans le salon {channel.mention}.")
+                if ping_role is not None:
+                    await interaction.followup.send(f"L'annonce sera faite avec la mention: {ping_role.mention}")
 
     async def check_streams(self):
         """Vérifier le statut de tous les streamers dans la base de données."""
@@ -65,17 +68,32 @@ class Stream(commands.Cog):
         except Exception as e:
             print(f"Erreur lors de la vérification des streams: {e}")
 
-    async def announce(self, streamer_name: str, channel: discord.TextChannel):
-        """Annoncer le début d'un stream dans un salon Discord."""
-        embed = discord.Embed(
-            title=f"🔴 {streamer_name} est en live !",
-            description=f"Regardez le stream ici : https://www.twitch.tv/{streamer_name}",
-            color=discord.Color.purple()
-        )
-        if streamer_name:
-            embed.set_image(url=f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{streamer_name}-1920x1080.jpg")
-        await channel.send(embed=embed)
-
+    @app_commands.command(name="stream_remove", description="Retirer un streamer de la liste des streamers.")
+    @app_commands.guilds(discord.Object(id=SERVER_ID))
+    @app_commands.default_permissions(administrator=True)
+    #Séléctionner le streamer à retirer dans la base de données en fonction de ceux actuellement dans la base de données
+    async def stream_remove(self, interaction: discord.Interaction, streamer_name: str):
+        """Retirer un streamer de la liste des streamers."""
+        if not streamer_name:
+            await interaction.response.send_message("Veuillez spécifier le nom du streamer à retirer. ceux disponibles sont :")
+            conn = sqlite3.connect('database.sqlite3')
+            cursor = conn.cursor()
+            cursor.execute("SELECT streamerName FROM streamers")
+            streamers = cursor.fetchall()
+            conn.close()
+            if not streamers:
+                await interaction.followup.send("Aucun streamer n'est actuellement enregistré.")
+                return
+            streamer_list = "\n".join([s[0] for s in streamers])
+            await interaction.followup.send(f"Streamers disponibles :\n{streamer_list}")
+            return
+        # Logique pour retirer le streamer de la base de données
+        conn = sqlite3.connect('database.sqlite3')
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM streamers WHERE streamerName = ?", (streamer_name,))
+        conn.commit()
+        conn.close()
+        await interaction.response.send_message(f"Streamer retiré : {streamer_name}")
 
 class getTwitchOAuth:
     """Classe pour gérer l'authentification avec l'API Twitch."""
@@ -147,24 +165,38 @@ class checkTwitchStatus:
 
 class announceStream:
     """Classe pour annoncer le début d'un stream."""
-    
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    # Annonce le début d'un stream dans un salon Discord dans un Embed.
-    # Titre du stream cliquable pour aller sur la chaine twitch
-    # Nom de la chaine Twitch
-    # Catégorie de stream
-    async def announce(self, streamer_name: str, channel: discord.TextChannel, stream_title: str, category: str):
+    
+    async def get_role(self, streamer_name: str):
+        """Récupérer le rôle à mentionner pour les annonces."""
+        conn = sqlite3.connect('database.sqlite3')
+        cursor = conn.cursor()
+        cursor.execute("SELECT roleId FROM streamers WHERE streamerName = ?", (streamer_name,))
+        result = cursor.fetchone()
+        conn.close()
+        if result and result[0]:
+            return discord.utils.get(self.bot.guilds[0].roles, id=int(result[0]))
+        return None
+    async def announce(self, streamer_name: str, channel: discord.TextChannel, stream_title: str, category: str, discordRole: Optional[discord.Role] = None):
         """Annoncer le début d'un stream dans un salon Discord."""
+        # Si aucun rôle n'est fourni, le récupérer
+        if discordRole is None:
+            discordRole = await self.get_role(streamer_name)
+        
         embed = discord.Embed(
-            title=f"{stream_title}",  # nom du stream cliquable pour aller sur la chaine twitch
+            title=f"{stream_title}",
             description=f"**Channel** : {streamer_name} \n**Catégorie** : {category}\n **Regardez le stream ici :** https://www.twitch.tv/{streamer_name}",
             color=discord.Color.purple()
         )
         if streamer_name:
             embed.set_image(url=f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{streamer_name}-1920x1080.jpg")
-        await channel.send(embed=embed)
+        
+        # Envoyer la mention séparément pour déclencher les notifications
+        if discordRole is not None:
+            await channel.send(content=discordRole.mention, embed=embed)
+        else:
+            await channel.send(embed=embed)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Stream(bot))
