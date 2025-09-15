@@ -1,8 +1,13 @@
 # ISROBOT - Discord Bot
 
-A feature-rich Discord bot built with Python and discord.py, offering various interactive commands, mini-games and Twitch stream notifications.
+A feature-rich Discord bot built with Python and discord.py, offering various interactive commands, mini-games, Twitch stream notifications, and AI integration.
 
 ## Features
+
+### 🤖 AI Integration
+- **AI Chat**: Ask questions to an AI assistant powered by Ollama
+- **Configurable Models**: Support for different AI models through Ollama
+- **Smart Responses**: AI responses formatted in beautiful Discord embeds
 
 ### 🎮 Mini-Games
 - **Counter Game**: A collaborative counting game where users must count sequentially without the same user counting twice in a row
@@ -33,6 +38,7 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 - Python 3.8+
 - Discord Bot Token
 - Twitch API credentials (for stream features)
+- Ollama server (for AI features)
 
 ### Setup
 
@@ -61,6 +67,8 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
    db_path=database.sqlite3
    twitch_client_id=YOUR_TWITCH_CLIENT_ID
    twitch_client_secret=YOUR_TWITCH_CLIENT_SECRET
+   ollama_host=http://localhost:11434
+   ollama_model=llama2
    ```
 
 5. **Run the bot**
@@ -80,6 +88,7 @@ ISROBOT_python/
 ├── database.sqlite3        # SQLite database (auto-created)
 ├── discord.log             # Bot logs (auto-created)
 └── commands/               # Bot command modules
+    ├── ai.py               # AI chat integration with Ollama
     ├── coinflip.py         # Coin flip command
     ├── count.py            # Counter game setup
     ├── music.py            # Music playback functionality
@@ -96,6 +105,7 @@ ISROBOT_python/
 - `/ping` - Responds with "Pong!"
 - `/ping_bot` - Shows bot latency in milliseconds
 - `/coinflip` - Flips a coin and shows the result
+- `/ai <question>` - Ask a question to the AI assistant
 
 
 ### XP System Commands
@@ -157,6 +167,14 @@ Users must count sequentially starting from 1. Rules:
 - Prevents duplicate notifications
 - Rich embeds with stream thumbnails and details
 
+### AI Assistant
+- Powered by Ollama for local AI inference
+- Configurable AI models (default: llama2)
+- Question length limit (500 characters) to prevent abuse
+- Response length limit (1024 characters) for Discord compatibility
+- Asynchronous processing to prevent bot blocking
+- Rich embed formatting for AI responses
+
 ## Dependencies
 
 The bot requires the following Python packages:
@@ -164,6 +182,7 @@ The bot requires the following Python packages:
 - `python-dotenv>=1.0.0` - Environment variable management
 - `aiohttp>=3.8.0` - HTTP client for API requests
 - `PyNaCl>=1.5.0` - Voice functionality support
+- `ollama>=0.5.0` - Ollama AI integration
 
 ## Logging
 
