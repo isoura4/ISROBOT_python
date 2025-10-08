@@ -174,6 +174,11 @@ Users must count sequentially starting from 1. Rules:
 - Response length limit (1024 characters) for Discord compatibility
 - Asynchronous processing to prevent bot blocking
 - Rich embed formatting for AI responses
+- **Content Moderation**: Automatic filtering of inappropriate, NSFW, and illegal content
+  - Input validation to reject inappropriate questions
+  - System prompts to guide AI behavior
+  - Output filtering to block inappropriate responses
+  - Compliance with server rules and community guidelines
 
 ## Dependencies
 
