@@ -28,6 +28,7 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 - **Short Notifications**: Notify when a channel posts a new YouTube Short
 - **Live Stream Notifications**: Alert when a channel starts a live stream
 - **Flexible Configuration**: Choose which types of content to monitor (videos, shorts, lives)
+- **Handle Support**: Add channels using either their channel ID or @handle (e.g., @el-dorado-community)
 - **Rich Embeds**: Beautiful announcements with thumbnails and video details
 
 ### 🔧 Administrative Tools
@@ -127,7 +128,7 @@ ISROBOT_python/
 - `/count <channel>` - Set up the counter mini-game in a specific channel
 - `/stream_add <streamer_name> <channel>` - Add a streamer to the notification list
 - `/stream_remove <streamer_name>` - Remove a streamer from the notification list
-- `/youtube_add <channel_id> <channel> [notify_videos] [notify_shorts] [notify_live] [ping_role]` - Add a YouTube channel to monitor
+- `/youtube_add <channel_id_or_handle> <channel> [notify_videos] [notify_shorts] [notify_live] [ping_role]` - Add a YouTube channel to monitor (accepts channel ID or @handle)
 - `/youtube_remove <channel_name>` - Remove a YouTube channel from monitoring
 - `/reload` - Reload all bot extensions
 
@@ -198,6 +199,7 @@ Users must count sequentially starting from 1. Rules:
 - Checks every 5 minutes for new content
 - Monitors videos, shorts, and live streams independently
 - Flexible configuration to choose which content types to monitor
+- Supports both channel IDs and handles (e.g., @channel-name) for easy channel identification
 - Distinguishes between regular videos (>60 seconds) and shorts (≤60 seconds)
 - Rich embeds with video thumbnails and direct links
 - Role mentions for notifications (optional)

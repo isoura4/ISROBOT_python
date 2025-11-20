@@ -25,20 +25,33 @@ class YouTube(commands.Cog):
     async def youtube_add(self, interaction: discord.Interaction, channel_id: str, channel: discord.TextChannel, 
                           notify_videos: bool = True, notify_shorts: bool = True, notify_live: bool = True, 
                           ping_role: discord.Role = None):
-        """Ajouter une chaîne YouTube à surveiller."""
+        """Ajouter une chaîne YouTube à surveiller. Accepte un ID de chaîne ou un handle (ex: @nom_chaine)."""
         if not YOUTUBE_API_KEY:
             await interaction.response.send_message("La clé API YouTube n'est pas configurée.")
             return
         
-        # Vérifier si le channel_id est valide
+        # Vérifier si le channel_id est valide ou si c'est un handle
         try:
             async with aiohttp.ClientSession() as session:
                 checker = checkYouTubeChannel(session)
-                channel_info = await checker.get_channel_info(channel_id)
-                if not channel_info:
-                    await interaction.response.send_message("Impossible de trouver cette chaîne YouTube. Vérifiez l'ID de la chaîne.")
-                    return
-                channel_name = channel_info.get('title', channel_id)
+                
+                # Si l'entrée commence par @, c'est un handle
+                if channel_id.startswith('@'):
+                    channel_data = await checker.get_channel_by_handle(channel_id)
+                    if not channel_data:
+                        await interaction.response.send_message(f"Impossible de trouver la chaîne YouTube avec le handle {channel_id}. Vérifiez que le handle est correct.")
+                        return
+                    # Extraire l'ID réel de la chaîne et le nom
+                    actual_channel_id = channel_data['id']
+                    channel_name = channel_data['snippet'].get('title', channel_id)
+                else:
+                    # C'est un ID de chaîne classique
+                    actual_channel_id = channel_id
+                    channel_info = await checker.get_channel_info(channel_id)
+                    if not channel_info:
+                        await interaction.response.send_message(f"Impossible de trouver cette chaîne YouTube. Vérifiez l'ID de la chaîne ou utilisez le handle (ex: @nom_chaine).")
+                        return
+                    channel_name = channel_info.get('title', channel_id)
         except Exception as e:
             await interaction.response.send_message(f"Erreur lors de la vérification de la chaîne: {e}")
             return
@@ -47,7 +60,7 @@ class YouTube(commands.Cog):
         conn = sqlite3.connect('database.sqlite3')
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM youtube_channels WHERE channelId = ? AND discordChannelId = ?", 
-                      (channel_id, str(channel.id)))
+                      (actual_channel_id, str(channel.id)))
         result = cursor.fetchone()
         conn.close()
 
@@ -61,7 +74,7 @@ class YouTube(commands.Cog):
         cursor.execute("""INSERT INTO youtube_channels 
                          (channelId, channelName, discordChannelId, roleId, notifyVideos, notifyShorts, notifyLive) 
                          VALUES (?, ?, ?, ?, ?, ?, ?)""", 
-                      (channel_id, channel_name, str(channel.id), 
+                      (actual_channel_id, channel_name, str(channel.id), 
                        str(ping_role.id) if ping_role else None,
                        1 if notify_videos else 0,
                        1 if notify_shorts else 0,
@@ -123,6 +136,33 @@ class checkYouTubeChannel:
     def __init__(self, session: aiohttp.ClientSession):
         self.session = session
         self.api_key = YOUTUBE_API_KEY
+
+    async def get_channel_by_handle(self, handle: str):
+        """Récupérer le channel ID à partir d'un handle YouTube (ex: @username)."""
+        if not self.api_key:
+            raise ValueError("La clé API YouTube n'est pas configurée.")
+        
+        # Retirer le @ si présent
+        if handle.startswith('@'):
+            handle = handle[1:]
+        
+        url = f"https://www.googleapis.com/youtube/v3/channels"
+        params = {
+            'part': 'id,snippet',
+            'forHandle': handle,
+            'key': self.api_key
+        }
+        
+        async with self.session.get(url, params=params) as response:
+            if response.status != 200:
+                raise Exception(f"Erreur lors de la récupération du channel par handle: {response.status}")
+            data = await response.json()
+            if 'items' in data and len(data['items']) > 0:
+                return {
+                    'id': data['items'][0]['id'],
+                    'snippet': data['items'][0]['snippet']
+                }
+            return None
 
     async def get_channel_info(self, channel_id: str):
         """Récupérer les informations d'une chaîne YouTube."""
