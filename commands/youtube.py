@@ -39,7 +39,11 @@ class YouTube(commands.Cog):
                 if channel_id.startswith('@'):
                     channel_data = await checker.get_channel_by_handle(channel_id)
                     if not channel_data:
-                        await interaction.response.send_message(f"Impossible de trouver la chaîne YouTube avec le handle {channel_id}. Vérifiez que le handle est correct.")
+                        await interaction.response.send_message(
+                            f"❌ Impossible de trouver la chaîne YouTube avec le handle **{channel_id}**.\n"
+                            f"Vérifiez que le handle est correct et que la chaîne existe.\n"
+                            f"Vous pouvez aussi essayer d'utiliser l'ID de la chaîne à la place."
+                        )
                         return
                     # Extraire l'ID réel de la chaîne et le nom
                     actual_channel_id = channel_data['id']
@@ -49,11 +53,18 @@ class YouTube(commands.Cog):
                     actual_channel_id = channel_id
                     channel_info = await checker.get_channel_info(channel_id)
                     if not channel_info:
-                        await interaction.response.send_message(f"Impossible de trouver cette chaîne YouTube. Vérifiez l'ID de la chaîne ou utilisez le handle (ex: @nom_chaine).")
+                        await interaction.response.send_message(
+                            f"❌ Impossible de trouver cette chaîne YouTube avec l'ID **{channel_id}**.\n"
+                            f"Vérifiez l'ID de la chaîne ou utilisez le handle (ex: @nom_chaine)."
+                        )
                         return
                     channel_name = channel_info.get('title', channel_id)
         except Exception as e:
-            await interaction.response.send_message(f"Erreur lors de la vérification de la chaîne: {e}")
+            error_message = str(e)
+            await interaction.response.send_message(
+                f"❌ Erreur lors de la vérification de la chaîne: {error_message}\n"
+                f"Assurez-vous que la clé API YouTube est correctement configurée et valide."
+            )
             return
         
         # Vérifier si la chaîne existe déjà dans la base de données
@@ -143,9 +154,11 @@ class checkYouTubeChannel:
             raise ValueError("La clé API YouTube n'est pas configurée.")
         
         # Retirer le @ si présent
+        original_handle = handle
         if handle.startswith('@'):
             handle = handle[1:]
         
+        # Méthode 1: Essayer avec le paramètre forHandle (pour les nouveaux handles)
         url = f"https://www.googleapis.com/youtube/v3/channels"
         params = {
             'part': 'id,snippet',
@@ -154,14 +167,78 @@ class checkYouTubeChannel:
         }
         
         async with self.session.get(url, params=params) as response:
-            if response.status != 200:
-                raise Exception(f"Erreur lors de la récupération du channel par handle: {response.status}")
-            data = await response.json()
-            if 'items' in data and len(data['items']) > 0:
-                return {
-                    'id': data['items'][0]['id'],
-                    'snippet': data['items'][0]['snippet']
-                }
+            if response.status == 200:
+                data = await response.json()
+                if 'items' in data and len(data['items']) > 0:
+                    return {
+                        'id': data['items'][0]['id'],
+                        'snippet': data['items'][0]['snippet']
+                    }
+            elif response.status == 400:
+                # Si forHandle ne fonctionne pas, essayer forUsername (ancienne méthode)
+                pass
+            else:
+                # Autre erreur
+                error_data = await response.json() if response.content_type == 'application/json' else {}
+                error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
+                raise Exception(f"Erreur API YouTube: {error_msg}")
+        
+        # Méthode 2: Essayer avec le paramètre forUsername (pour les anciens usernames)
+        params = {
+            'part': 'id,snippet',
+            'forUsername': handle,
+            'key': self.api_key
+        }
+        
+        async with self.session.get(url, params=params) as response:
+            if response.status == 200:
+                data = await response.json()
+                if 'items' in data and len(data['items']) > 0:
+                    return {
+                        'id': data['items'][0]['id'],
+                        'snippet': data['items'][0]['snippet']
+                    }
+        
+        # Méthode 3: Utiliser l'API de recherche comme dernier recours
+        search_url = f"https://www.googleapis.com/youtube/v3/search"
+        search_params = {
+            'part': 'snippet',
+            'q': original_handle,
+            'type': 'channel',
+            'maxResults': 1,
+            'key': self.api_key
+        }
+        
+        async with self.session.get(search_url, params=search_params) as response:
+            if response.status == 200:
+                data = await response.json()
+                if 'items' in data and len(data['items']) > 0:
+                    channel_id = data['items'][0]['snippet']['channelId']
+                    # Récupérer les informations complètes du channel
+                    return await self.get_channel_info_by_id(channel_id)
+        
+        return None
+    
+    async def get_channel_info_by_id(self, channel_id: str):
+        """Récupérer les informations complètes d'une chaîne par son ID."""
+        if not self.api_key:
+            raise ValueError("La clé API YouTube n'est pas configurée.")
+        
+        url = f"https://www.googleapis.com/youtube/v3/channels"
+        params = {
+            'part': 'id,snippet',
+            'id': channel_id,
+            'key': self.api_key
+        }
+        
+        async with self.session.get(url, params=params) as response:
+            if response.status == 200:
+                data = await response.json()
+                if 'items' in data and len(data['items']) > 0:
+                    return {
+                        'id': data['items'][0]['id'],
+                        'snippet': data['items'][0]['snippet']
+                    }
             return None
 
     async def get_channel_info(self, channel_id: str):
