@@ -222,13 +222,14 @@ class checkYouTubeChannel:
 
 def is_short(video_duration: str) -> bool:
     """Déterminer si une vidéo est un short basé sur sa durée (moins de 61 secondes)."""
-    # Format de durée ISO 8601: PT#M#S ou PT#S
+    # Format de durée ISO 8601: PT#H#M#S ou PT#M#S ou PT#S
     import re
-    match = re.match(r'PT(?:(\d+)M)?(?:(\d+)S)?', video_duration)
+    match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', video_duration)
     if match:
-        minutes = int(match.group(1) or 0)
-        seconds = int(match.group(2) or 0)
-        total_seconds = minutes * 60 + seconds
+        hours = int(match.group(1) or 0)
+        minutes = int(match.group(2) or 0)
+        seconds = int(match.group(3) or 0)
+        total_seconds = hours * 3600 + minutes * 60 + seconds
         return total_seconds <= 60
     return False
 
