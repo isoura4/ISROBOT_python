@@ -59,6 +59,23 @@ def create_database():
         )
     ''')
 
+    # Création de la table des chaînes YouTube
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS youtube_channels (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channelId TEXT NOT NULL,
+            channelName TEXT NOT NULL,
+            discordChannelId TEXT NOT NULL,
+            roleId TEXT,
+            lastVideoId TEXT,
+            lastShortId TEXT,
+            lastLiveId TEXT,
+            notifyVideos INTEGER DEFAULT 1,
+            notifyShorts INTEGER DEFAULT 1,
+            notifyLive INTEGER DEFAULT 1
+        )
+    ''')
+
     # Création de la table pour le jeu du compteur
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS counter_game (
