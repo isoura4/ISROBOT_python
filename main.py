@@ -105,6 +105,9 @@ class ISROBOT(commands.Bot):
 
         # Démarrer la tâche de vérification des streams en arrière-plan
         self.stream_check_task = self.loop.create_task(self.check_streams_loop())
+        
+        # Démarrer la tâche de vérification YouTube en arrière-plan
+        self.youtube_check_task = self.loop.create_task(self.check_youtube_loop())
 
     async def check_streams_loop(self):
         """Vérifier périodiquement le statut des streamers."""
@@ -159,6 +162,137 @@ class ISROBOT(commands.Bot):
                             
             except Exception as e:
                 print(f"Erreur lors de la vérification des streams: {e}")
+            
+            # Attendre 5 minutes avant la prochaine vérification
+            await asyncio.sleep(300)
+
+    async def check_youtube_loop(self):
+        """Vérifier périodiquement les nouvelles vidéos, shorts et lives YouTube."""
+        await self.wait_until_ready()  # Attendre que le bot soit prêt
+        
+        while not self.is_closed():
+            try:
+                from commands.youtube import checkYouTubeChannel, announceYouTube, is_short
+                if self.session:
+                    youtube_checker = checkYouTubeChannel(self.session)
+                    
+                    # Récupérer toutes les chaînes YouTube de la base de données
+                    import sqlite3
+                    conn = sqlite3.connect('database.sqlite3')
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT * FROM youtube_channels")
+                    channels = cursor.fetchall()
+                    conn.close()
+                    
+                    for channel_data in channels:
+                        try:
+                            channel_id = channel_data[1]  # channelId
+                            channel_name = channel_data[2]  # channelName
+                            discord_channel_id = int(channel_data[3])  # discordChannelId
+                            last_video_id = channel_data[5]  # lastVideoId
+                            last_short_id = channel_data[6]  # lastShortId
+                            last_live_id = channel_data[7]  # lastLiveId
+                            notify_videos = channel_data[8]  # notifyVideos
+                            notify_shorts = channel_data[9]  # notifyShorts
+                            notify_live = channel_data[10]  # notifyLive
+                            
+                            discord_channel = self.get_channel(discord_channel_id)
+                            if not discord_channel or not isinstance(discord_channel, discord.TextChannel):
+                                continue
+                            
+                            announcer = announceYouTube(self)
+                            
+                            # Vérifier les lives
+                            if notify_live:
+                                try:
+                                    live_videos = await youtube_checker.check_live_status(channel_id)
+                                    if live_videos and len(live_videos) > 0:
+                                        latest_live = live_videos[0]
+                                        live_id = latest_live['id']['videoId']
+                                        
+                                        # Si c'est un nouveau live
+                                        if live_id != last_live_id:
+                                            live_title = latest_live['snippet']['title']
+                                            thumbnail_url = latest_live['snippet']['thumbnails']['high']['url']
+                                            await announcer.announce_live(channel_id, channel_name, discord_channel, 
+                                                                        live_id, live_title, thumbnail_url)
+                                            
+                                            # Mettre à jour lastLiveId
+                                            conn = sqlite3.connect('database.sqlite3')
+                                            cursor = conn.cursor()
+                                            cursor.execute("UPDATE youtube_channels SET lastLiveId = ? WHERE id = ?", 
+                                                         (live_id, channel_data[0]))
+                                            conn.commit()
+                                            conn.close()
+                                    else:
+                                        # Pas de live en cours, réinitialiser lastLiveId
+                                        if last_live_id:
+                                            conn = sqlite3.connect('database.sqlite3')
+                                            cursor = conn.cursor()
+                                            cursor.execute("UPDATE youtube_channels SET lastLiveId = NULL WHERE id = ?", 
+                                                         (channel_data[0],))
+                                            conn.commit()
+                                            conn.close()
+                                except Exception as e:
+                                    print(f"Erreur lors de la vérification du live pour {channel_name}: {e}")
+                            
+                            # Vérifier les nouvelles vidéos et shorts
+                            if notify_videos or notify_shorts:
+                                try:
+                                    latest_uploads = await youtube_checker.get_latest_uploads(channel_id, max_results=3)
+                                    
+                                    for upload in latest_uploads:
+                                        video_id = upload['snippet']['resourceId']['videoId']
+                                        
+                                        # Récupérer les détails de la vidéo pour déterminer si c'est un short
+                                        video_details = await youtube_checker.get_video_details(video_id)
+                                        if not video_details:
+                                            continue
+                                        
+                                        video_title = video_details['snippet']['title']
+                                        thumbnail_url = video_details['snippet']['thumbnails']['high']['url']
+                                        duration = video_details['contentDetails']['duration']
+                                        
+                                        is_short_video = is_short(duration)
+                                        
+                                        # Annoncer les shorts
+                                        if is_short_video and notify_shorts:
+                                            if video_id != last_short_id:
+                                                await announcer.announce_short(channel_id, channel_name, discord_channel, 
+                                                                             video_id, video_title, thumbnail_url)
+                                                
+                                                # Mettre à jour lastShortId
+                                                conn = sqlite3.connect('database.sqlite3')
+                                                cursor = conn.cursor()
+                                                cursor.execute("UPDATE youtube_channels SET lastShortId = ? WHERE id = ?", 
+                                                             (video_id, channel_data[0]))
+                                                conn.commit()
+                                                conn.close()
+                                                break  # Ne traiter qu'un seul nouveau short à la fois
+                                        
+                                        # Annoncer les vidéos normales
+                                        elif not is_short_video and notify_videos:
+                                            if video_id != last_video_id:
+                                                await announcer.announce_video(channel_id, channel_name, discord_channel, 
+                                                                             video_id, video_title, thumbnail_url)
+                                                
+                                                # Mettre à jour lastVideoId
+                                                conn = sqlite3.connect('database.sqlite3')
+                                                cursor = conn.cursor()
+                                                cursor.execute("UPDATE youtube_channels SET lastVideoId = ? WHERE id = ?", 
+                                                             (video_id, channel_data[0]))
+                                                conn.commit()
+                                                conn.close()
+                                                break  # Ne traiter qu'une seule nouvelle vidéo à la fois
+                                
+                                except Exception as e:
+                                    print(f"Erreur lors de la vérification des uploads pour {channel_name}: {e}")
+                        
+                        except Exception as e:
+                            print(f"Erreur lors de la vérification de la chaîne {channel_data[2]}: {e}")
+                            
+            except Exception as e:
+                print(f"Erreur lors de la vérification YouTube: {e}")
             
             # Attendre 5 minutes avant la prochaine vérification
             await asyncio.sleep(300)
@@ -227,6 +361,10 @@ class ISROBOT(commands.Bot):
         # Arrêter la tâche de vérification des streams
         if hasattr(self, 'stream_check_task'):
             self.stream_check_task.cancel()
+        
+        # Arrêter la tâche de vérification YouTube
+        if hasattr(self, 'youtube_check_task'):
+            self.youtube_check_task.cancel()
             
         if self.session:
             await self.session.close()

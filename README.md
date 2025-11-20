@@ -23,6 +23,13 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 - **Stream Management**: Add streamers to watch list with custom notification channels
 - **Rich Embeds**: Beautiful stream announcements with thumbnails and stream details
 
+### 📺 YouTube Integration
+- **Video Notifications**: Automatically announce when a channel uploads a new video
+- **Short Notifications**: Notify when a channel posts a new YouTube Short
+- **Live Stream Notifications**: Alert when a channel starts a live stream
+- **Flexible Configuration**: Choose which types of content to monitor (videos, shorts, lives)
+- **Rich Embeds**: Beautiful announcements with thumbnails and video details
+
 ### 🔧 Administrative Tools
 - **Reload Command**: Hot-reload bot extensions without restarting
 - **Configuration Commands**: Set up mini-games and stream notifications
@@ -38,6 +45,7 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 - Python 3.8+
 - Discord Bot Token
 - Twitch API credentials (for stream features)
+- YouTube Data API v3 key (for YouTube features)
 - Ollama server (for AI features)
 
 ### Setup
@@ -67,6 +75,7 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
    db_path=database.sqlite3
    twitch_client_id=YOUR_TWITCH_CLIENT_ID
    twitch_client_secret=YOUR_TWITCH_CLIENT_SECRET
+   youtube_api_key=YOUR_YOUTUBE_API_KEY
    ollama_host=http://localhost:11434
    ollama_model=llama2
    ```
@@ -96,7 +105,9 @@ ISROBOT_python/
     ├── ping_bot.py         # Bot latency command
     ├── reload.py           # Hot-reload extensions
     ├── stream.py           # Twitch stream integration
-    └── xp_system.py        # XP and leveling system
+    ├── xp_system.py        # XP and leveling system
+    ├── xp_voice.py         # Voice XP tracking
+    └── youtube.py          # YouTube channel integration
 ```
 
 ## Commands
@@ -115,6 +126,9 @@ ISROBOT_python/
 ### Administrative Commands (Admin Only)
 - `/count <channel>` - Set up the counter mini-game in a specific channel
 - `/stream_add <streamer_name> <channel>` - Add a streamer to the notification list
+- `/stream_remove <streamer_name>` - Remove a streamer from the notification list
+- `/youtube_add <channel_id> <channel> [notify_videos] [notify_shorts] [notify_live] [ping_role]` - Add a YouTube channel to monitor
+- `/youtube_remove <channel_name>` - Remove a YouTube channel from monitoring
 - `/reload` - Reload all bot extensions
 
 ## Database Schema
@@ -128,6 +142,11 @@ The bot uses SQLite with the following tables:
 ### Streamers Table
 - Manages Twitch streamers for notifications
 - Tracks announcement status and stream details
+
+### YouTube Channels Table
+- Manages YouTube channels for notifications
+- Tracks last video/short/live IDs to prevent duplicates
+- Configurable notification types (videos, shorts, lives)
 
 ### Counter Game Table
 - Stores counter game configuration per server
@@ -149,6 +168,14 @@ The bot uses SQLite with the following tables:
 2. Get your Client ID and Client Secret
 3. Add them to your `.env` file
 
+### YouTube API Setup
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the YouTube Data API v3
+4. Create credentials (API Key)
+5. Add the API key to your `.env` file as `youtube_api_key`
+6. Note: YouTube API has quota limits (10,000 units/day by default)
+
 ## Features in Detail
 
 ### Counter Game
@@ -166,6 +193,15 @@ Users must count sequentially starting from 1. Rules:
 - Checks every 5 minutes for live streams
 - Prevents duplicate notifications
 - Rich embeds with stream thumbnails and details
+
+### YouTube Notifications
+- Checks every 5 minutes for new content
+- Monitors videos, shorts, and live streams independently
+- Flexible configuration to choose which content types to monitor
+- Distinguishes between regular videos (>60 seconds) and shorts (≤60 seconds)
+- Rich embeds with video thumbnails and direct links
+- Role mentions for notifications (optional)
+- Prevents duplicate notifications for the same content
 
 ### AI Assistant
 - Powered by Ollama for local AI inference
