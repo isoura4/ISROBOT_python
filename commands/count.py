@@ -43,9 +43,6 @@ class Count(commands.Cog):
             )
             return
 
-        # Créer la base de données et les tables si elles n'existent pas
-        database.create_database()
-
         # Enregistrer la configuration dans la base de données
         conn = database.get_db_connection()
         cursor = conn.cursor()
