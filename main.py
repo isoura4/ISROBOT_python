@@ -153,7 +153,7 @@ class ISROBOT(commands.Bot):
                             # Database schema: streamers table
                             # [0]=id, [1]=streamerName, [2]=streamChannelId,
                             # [3]=roleId, [4]=announced, [5]=startTime
-                            
+
                             streamer_id = streamer[0]
                             streamer_name = streamer[1]
                             stream_channel_id = streamer[2]
@@ -589,13 +589,13 @@ class ISROBOT(commands.Bot):
                                             # Vidéo ignorée car les notifications sont désactivées pour ce type
                                             if is_short_video and not notify_shorts:
                                                 print(
-                                                    f"          ⊗ Short ignoré "
-                                                    f"(notifications désactivées)"
+                                                    "          ⊗ Short ignoré "
+                                                    "(notifications désactivées)"
                                                 )
                                             elif not is_short_video and not notify_videos:
                                                 print(
-                                                    f"          ⊗ Vidéo ignorée "
-                                                    f"(notifications désactivées)"
+                                                    "          ⊗ Vidéo ignorée "
+                                                    "(notifications désactivées)"
                                                 )
 
                                 except discord.errors.Forbidden as e:
