@@ -1,6 +1,5 @@
 import logging
 import os
-import sqlite3
 from typing import Optional
 
 import aiohttp
@@ -8,6 +7,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
+
+import database
 
 # Chargement du fichier .env
 load_dotenv()
@@ -85,7 +86,7 @@ class YouTube(commands.Cog):
             return
 
         # Vérifier si la chaîne existe déjà dans la base de données
-        conn = sqlite3.connect("database.sqlite3")
+        conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             "SELECT * FROM youtube_channels WHERE channelId = ? AND discordChannelId = ?",
@@ -101,7 +102,7 @@ class YouTube(commands.Cog):
             return
 
         # Ajouter la chaîne à la base de données
-        conn = sqlite3.connect("database.sqlite3")
+        conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO youtube_channels
@@ -149,25 +150,24 @@ class YouTube(commands.Cog):
     async def youtube_remove(self, interaction: discord.Interaction, channel_name: str):
         """Retirer une chaîne YouTube de la liste de surveillance."""
         if not channel_name:
-            await interaction.response.send_message(
-                "Veuillez spécifier le nom de la chaîne à retirer."
-            )
-            conn = sqlite3.connect("database.sqlite3")
+            conn = database.get_db_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT channelName FROM youtube_channels")
             channels = cursor.fetchall()
             conn.close()
             if not channels:
-                await interaction.followup.send(
+                await interaction.response.send_message(
                     "Aucune chaîne YouTube n'est actuellement enregistrée."
                 )
                 return
             channel_list = "\n".join([c[0] for c in channels])
-            await interaction.followup.send(f"Chaînes disponibles :\n{channel_list}")
+            await interaction.response.send_message(
+                f"Veuillez spécifier le nom de la chaîne à retirer. Chaînes disponibles :\n{channel_list}"
+            )
             return
 
         # Retirer la chaîne de la base de données
-        conn = sqlite3.connect("database.sqlite3")
+        conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             "DELETE FROM youtube_channels WHERE channelName = ?", (channel_name,)
@@ -271,13 +271,16 @@ class checkYouTubeChannel:
         params = {"part": "id,snippet", "id": channel_id, "key": self.api_key}
 
         async with self.session.get(url, params=params) as response:
-            if response.status == 200:
-                data = await response.json()
-                if "items" in data and len(data["items"]) > 0:
-                    return {
-                        "id": data["items"][0]["id"],
-                        "snippet": data["items"][0]["snippet"],
-                    }
+            if response.status != 200:
+                raise Exception(
+                    f"Erreur lors de la vérification de la chaîne: {response.status}"
+                )
+            data = await response.json()
+            if "items" in data and len(data["items"]) > 0:
+                return {
+                    "id": data["items"][0]["id"],
+                    "snippet": data["items"][0]["snippet"],
+                }
             return None
 
     async def get_channel_info(self, channel_id: str):
@@ -491,7 +494,7 @@ class announceYouTube:
 
     async def get_role(self, channel_id: str):
         """Récupérer le rôle à mentionner pour les annonces."""
-        conn = sqlite3.connect("database.sqlite3")
+        conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             "SELECT roleId FROM youtube_channels WHERE channelId = ?", (channel_id,)
@@ -524,14 +527,10 @@ class announceYouTube:
         if thumbnail_url:
             embed.set_image(url=thumbnail_url)
 
-        try:
-            if discord_role is not None:
-                await discord_channel.send(content=discord_role.mention, embed=embed)
-            else:
-                await discord_channel.send(embed=embed)
-        except discord.errors.Forbidden as e:
-            # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
-            raise
+        if discord_role is not None:
+            await discord_channel.send(content=discord_role.mention, embed=embed)
+        else:
+            await discord_channel.send(embed=embed)
 
     async def announce_short(
         self,
@@ -555,14 +554,10 @@ class announceYouTube:
         if thumbnail_url:
             embed.set_image(url=thumbnail_url)
 
-        try:
-            if discord_role is not None:
-                await discord_channel.send(content=discord_role.mention, embed=embed)
-            else:
-                await discord_channel.send(embed=embed)
-        except discord.errors.Forbidden as e:
-            # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
-            raise
+        if discord_role is not None:
+            await discord_channel.send(content=discord_role.mention, embed=embed)
+        else:
+            await discord_channel.send(embed=embed)
 
     async def announce_live(
         self,
@@ -586,15 +581,10 @@ class announceYouTube:
         if thumbnail_url:
             embed.set_image(url=thumbnail_url)
 
-        try:
-            if discord_role is not None:
-                await discord_channel.send(content=discord_role.mention, embed=embed)
-            else:
-                await discord_channel.send(embed=embed)
-        except discord.errors.Forbidden as e:
-            # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
-            raise
-
+        if discord_role is not None:
+            await discord_channel.send(content=discord_role.mention, embed=embed)
+        else:
+            await discord_channel.send(embed=embed)
 
 
 async def setup(bot: commands.Bot):
