@@ -424,6 +424,22 @@ class ISROBOT(commands.Bot):
             # Attendre 5 minutes avant la prochaine vérification
             await asyncio.sleep(300)
 
+    async def reset_counter_game(
+        self, message: discord.Message, cursor, conn, error_message: str
+    ):
+        """Réinitialiser le compteur du minijeu après une erreur."""
+        await message.add_reaction("❌")
+        await message.channel.send(error_message)
+        await message.channel.send("On recommence à zéro !")
+        # Réinitialiser le compteur
+        cursor.execute(
+            "UPDATE counter_game SET count = 0, lastUserId = NULL WHERE guildId = ?",
+            (str(message.guild.id),),
+        )
+        conn.commit()
+        await message.channel.send("Le compteur a été réinitialisé.")
+        conn.close()
+
     async def on_message(self, message: discord.Message):
         # Ignorer les messages des bots
         if message.author.bot:
@@ -452,19 +468,12 @@ class ISROBOT(commands.Bot):
                 message.content.isdigit() and not str(message.content).isspace()
             ):  # Vérifie si le message est un chiffre
                 if str(message.author.id) == last_user_id:
-                    await message.add_reaction("❌")
-                    await message.channel.send(
-                        "Vous ne pouvez pas compter deux fois de suite !"
+                    await self.reset_counter_game(
+                        message,
+                        cursor,
+                        conn,
+                        "Vous ne pouvez pas compter deux fois de suite !",
                     )
-                    await message.channel.send("On recommence à zéro !")
-                    # Réinitialiser le compteur
-                    cursor.execute(
-                        "UPDATE counter_game SET count = 0, lastUserId = NULL WHERE guildId = ?",
-                        (str(message.guild.id),),
-                    )
-                    conn.commit()
-                    await message.channel.send("Le compteur a été réinitialisé.")
-                    conn.close()
                     return
                 if str(int(message.content)) == str(result["count"] + 1):
                     await message.add_reaction("✅")
@@ -482,37 +491,22 @@ class ISROBOT(commands.Bot):
                     conn.close()
                     return
                 elif str(int(message.content)) == str(result["count"]):
-                    await message.add_reaction("❌")
-                    await message.channel.send(
-                        "Vous avez mis le même chiffre ! Le bon chiffre était "
-                        + str(last_count + 1)
+                    await self.reset_counter_game(
+                        message,
+                        cursor,
+                        conn,
+                        f"Vous avez mis le même chiffre ! Le bon chiffre était {last_count + 1}",
                     )
-                    await message.channel.send("On recommence à zéro !")
-                    # Réinitialiser le compteur
-                    cursor.execute(
-                        "UPDATE counter_game SET count = 0, lastUserId = NULL WHERE guildId = ?",
-                        (str(message.guild.id),),
-                    )
-                    conn.commit()
-                    await message.channel.send("Le compteur a été réinitialisé.")
-                    conn.close()
                     return
                 else:
                     # Mauvais chiffre (ni count+1, ni count)
-                    await message.add_reaction("❌")
-                    await message.channel.send(
+                    await self.reset_counter_game(
+                        message,
+                        cursor,
+                        conn,
                         f"Mauvais chiffre ! Le bon chiffre était {last_count + 1}, "
-                        f"mais vous avez mis {message.content}."
+                        f"mais vous avez mis {message.content}.",
                     )
-                    await message.channel.send("On recommence à zéro !")
-                    # Réinitialiser le compteur
-                    cursor.execute(
-                        "UPDATE counter_game SET count = 0, lastUserId = NULL WHERE guildId = ?",
-                        (str(message.guild.id),),
-                    )
-                    conn.commit()
-                    await message.channel.send("Le compteur a été réinitialisé.")
-                    conn.close()
                     return
             else:
                 conn.close()
