@@ -315,17 +315,12 @@ class ISROBOT(commands.Bot):
                                             conn.commit()
                                             conn.close()
                                 except discord.errors.Forbidden as e:
-
                                     logger.error(
-
-                                        f"Permission Discord refusée pour {channel_name} lors de l\'annonce du live: {e}"
-
+                                        f"Permission Discord refusée pour {channel_name} lors de l'annonce du live: {e}"
                                     )
 
                                 except Exception as e:
-
                                     logger.error(
-
                                         f"Erreur lors de la vérification du live pour {channel_name}: {e}"
                                     )
 
@@ -337,10 +332,6 @@ class ISROBOT(commands.Bot):
                                             channel_id, max_results=3
                                         )
                                     )
-
-                                    if not latest_uploads:
-                                        # Si la liste est vide, continuer sans erreur (le canal peut ne pas avoir de vidéos)
-                                        continue
 
                                     for upload in latest_uploads:
                                         video_id = upload["snippet"]["resourceId"][
@@ -417,23 +408,12 @@ class ISROBOT(commands.Bot):
                                                 break  # Ne traiter qu'une seule nouvelle vidéo à la fois
 
                                 except discord.errors.Forbidden as e:
-
-
                                     logger.error(
-
-
-                                        f"Permission Discord refusée pour {channel_name} lors de l\'annonce d\'une vidéo/short: {e}"
-
-
+                                        f"Permission Discord refusée pour {channel_name} lors de l'annonce d'une vidéo/short: {e}"
                                     )
 
-
                                 except Exception as e:
-
-
                                     logger.error(
-
-
                                         f"Erreur lors de la vérification des uploads pour {channel_name}: {e}"
                                     )
 
