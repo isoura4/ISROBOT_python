@@ -481,11 +481,28 @@ class ISROBOT(commands.Bot):
                     conn.commit()
                     conn.close()
                     return
-                if str(int(message.content)) == str(result["count"]):
+                elif str(int(message.content)) == str(result["count"]):
                     await message.add_reaction("❌")
                     await message.channel.send(
                         "Vous avez mis le même chiffre ! Le bon chiffre était "
                         + str(last_count + 1)
+                    )
+                    await message.channel.send("On recommence à zéro !")
+                    # Réinitialiser le compteur
+                    cursor.execute(
+                        "UPDATE counter_game SET count = 0, lastUserId = NULL WHERE guildId = ?",
+                        (str(message.guild.id),),
+                    )
+                    conn.commit()
+                    await message.channel.send("Le compteur a été réinitialisé.")
+                    conn.close()
+                    return
+                else:
+                    # Mauvais chiffre (ni count+1, ni count)
+                    await message.add_reaction("❌")
+                    await message.channel.send(
+                        f"Mauvais chiffre ! Le bon chiffre était {last_count + 1}, "
+                        f"mais vous avez mis {message.content}."
                     )
                     await message.channel.send("On recommence à zéro !")
                     # Réinitialiser le compteur
