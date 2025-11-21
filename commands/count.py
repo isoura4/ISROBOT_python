@@ -20,7 +20,7 @@ class count(commands.Cog):
         self.bot = bot
 
     @app_commands.command(
-        name="count", description="Paramétré le salon du minijeux du compteur."
+        name="count", description="Paramétrer le salon pour le minijeu du compteur."
     )
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.default_permissions(administrator=True)
@@ -31,7 +31,7 @@ class count(commands.Cog):
         # Vérifier que la commande est exécutée dans un serveur
         if not interaction.guild:
             await interaction.response.send_message(
-                "Cette commande ne peut être utilisée qu'dans un serveur.",
+                "Cette commande ne peut être utilisée que dans un serveur.",
                 ephemeral=True,
             )
             return
@@ -40,13 +40,6 @@ class count(commands.Cog):
             await interaction.response.send_message(
                 "Le chemin de la base de données n'est pas défini dans les variables d'environnement.",
                 ephemeral=True,
-            )
-            return
-
-        # Vérifier si le salon est valide
-        if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message(
-                "Veuillez spécifier un salon texte valide.", ephemeral=True
             )
             return
 

@@ -102,25 +102,24 @@ class Stream(commands.Cog):
     )
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.default_permissions(administrator=True)
-    # Séléctionner le streamer à retirer dans la base de données en fonction de ceux actuellement dans la base de données
+    # Sélectionner le streamer à retirer dans la base de données en fonction de ceux actuellement dans la base de données
     async def stream_remove(self, interaction: discord.Interaction, streamer_name: str):
         """Retirer un streamer de la liste des streamers."""
         if not streamer_name:
-            await interaction.response.send_message(
-                "Veuillez spécifier le nom du streamer à retirer. ceux disponibles sont :"
-            )
             conn = sqlite3.connect("database.sqlite3")
             cursor = conn.cursor()
             cursor.execute("SELECT streamerName FROM streamers")
             streamers = cursor.fetchall()
             conn.close()
             if not streamers:
-                await interaction.followup.send(
+                await interaction.response.send_message(
                     "Aucun streamer n'est actuellement enregistré."
                 )
                 return
             streamer_list = "\n".join([s[0] for s in streamers])
-            await interaction.followup.send(f"Streamers disponibles :\n{streamer_list}")
+            await interaction.response.send_message(
+                f"Veuillez spécifier le nom du streamer à retirer. Ceux disponibles sont :\n{streamer_list}"
+            )
             return
         # Logique pour retirer le streamer de la base de données
         conn = sqlite3.connect("database.sqlite3")
