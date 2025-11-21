@@ -341,6 +341,17 @@ class ISROBOT(commands.Bot):
 
                             announcer = AnnounceYouTube(self)
 
+                            # Vérifier si au moins un type de notification est activé
+                            if not notify_videos and not notify_shorts and not notify_live:
+                                print(
+                                    f"    ⚠ Aucune notification activée pour "
+                                    f"{channel_name} - ignorer"
+                                )
+                                logger.warning(
+                                    f"Aucune notification activée pour {channel_name}"
+                                )
+                                continue
+
                             # Vérifier les lives
                             if notify_live:
                                 print(

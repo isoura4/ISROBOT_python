@@ -184,6 +184,19 @@ class YouTube(commands.Cog):
             ", ".join(notifications) if notifications else "aucune notification"
         )
 
+        # Avertir si aucune notification n'est activée
+        if not notifications:
+            await interaction.response.send_message(
+                f"⚠️ Chaîne YouTube ajoutée : **{channel_name}** dans le salon "
+                f"{channel.mention}.\n"
+                f"📢 Notifications: {notif_text}\n"
+                f"⚠️ **Attention**: Aucune notification n'est activée. Le bot ne "
+                f"surveillera pas cette chaîne.\n"
+                f"Utilisez `/youtube_add` à nouveau avec au moins un type de "
+                f"notification activé."
+            )
+            return
+
         # Préparer le message de confirmation avec les infos de suivi
         tracking_info = []
         if last_video_id:
