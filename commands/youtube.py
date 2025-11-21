@@ -290,7 +290,11 @@ class checkYouTubeChannel:
                     error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la récupération de l'ID de playlist: {error_msg}")
-            data = await response.json()
+            try:
+                data = await response.json()
+            except Exception as e:
+                logger.error(f"Erreur lors du parsing JSON pour le canal {channel_id}: {e}")
+                return []
             if 'items' not in data or len(data['items']) == 0:
                 logger.info(f"Aucune donnée de canal trouvée pour: {channel_id}")
                 return []
@@ -317,7 +321,11 @@ class checkYouTubeChannel:
                     error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la récupération des vidéos: {error_msg}")
-            data = await response.json()
+            try:
+                data = await response.json()
+            except Exception as e:
+                logger.error(f"Erreur lors du parsing JSON de la playlist {uploads_playlist_id}: {e}")
+                return []
             return data.get('items', [])
 
     async def get_video_details(self, video_id: str):
@@ -343,7 +351,11 @@ class checkYouTubeChannel:
                     error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la récupération des détails de la vidéo: {error_msg}")
-            data = await response.json()
+            try:
+                data = await response.json()
+            except Exception as e:
+                logger.error(f"Erreur lors du parsing JSON pour la vidéo {video_id}: {e}")
+                return None
             if 'items' in data and len(data['items']) > 0:
                 return data['items'][0]
             return None
@@ -373,7 +385,11 @@ class checkYouTubeChannel:
                     error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la vérification du statut live: {error_msg}")
-            data = await response.json()
+            try:
+                data = await response.json()
+            except Exception as e:
+                logger.error(f"Erreur lors du parsing JSON pour le statut live du canal {channel_id}: {e}")
+                return []
             return data.get('items', [])
 
 def is_short(video_duration: str) -> bool:

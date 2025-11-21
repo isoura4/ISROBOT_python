@@ -309,10 +309,10 @@ class ISROBOT(commands.Bot):
                                     logger.error(f"Erreur lors de la vérification des uploads pour {channel_name}: {e}")
                         
                         except Exception as e:
-                            print(f"Erreur lors de la vérification de la chaîne {channel_data[2]}: {e}")
+                            logger.error(f"Erreur lors de la vérification de la chaîne {channel_data[2]}: {e}")
                             
             except Exception as e:
-                print(f"Erreur lors de la vérification YouTube: {e}")
+                logger.error(f"Erreur lors de la vérification YouTube: {e}")
             
             # Attendre 5 minutes avant la prochaine vérification
             await asyncio.sleep(300)
