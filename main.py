@@ -198,7 +198,18 @@ class ISROBOT(commands.Bot):
                             
                             discord_channel = self.get_channel(discord_channel_id)
                             if not discord_channel or not isinstance(discord_channel, discord.TextChannel):
+                                print(f"Canal Discord introuvable ou invalide pour {channel_name}: {discord_channel_id}")
                                 continue
+                            
+                            # Vérifier les permissions du bot dans le canal Discord
+                            if discord_channel.guild and discord_channel.guild.me:
+                                permissions = discord_channel.permissions_for(discord_channel.guild.me)
+                                if not permissions.send_messages:
+                                    print(f"Permission manquante pour envoyer des messages dans {discord_channel.name} (ID: {discord_channel_id}) pour la chaîne YouTube {channel_name}")
+                                    continue
+                                if not permissions.embed_links:
+                                    print(f"Permission manquante pour envoyer des embeds dans {discord_channel.name} (ID: {discord_channel_id}) pour la chaîne YouTube {channel_name}")
+                                    continue
                             
                             announcer = announceYouTube(self)
                             
@@ -233,6 +244,8 @@ class ISROBOT(commands.Bot):
                                                          (channel_data[0],))
                                             conn.commit()
                                             conn.close()
+                                except discord.errors.Forbidden as e:
+                                    print(f"Permission Discord refusée pour {channel_name} lors de l'annonce du live: {e}")
                                 except Exception as e:
                                     print(f"Erreur lors de la vérification du live pour {channel_name}: {e}")
                             
@@ -240,6 +253,10 @@ class ISROBOT(commands.Bot):
                             if notify_videos or notify_shorts:
                                 try:
                                     latest_uploads = await youtube_checker.get_latest_uploads(channel_id, max_results=3)
+                                    
+                                    if not latest_uploads:
+                                        # Si la liste est vide, continuer sans erreur (le canal peut ne pas avoir de vidéos)
+                                        continue
                                     
                                     for upload in latest_uploads:
                                         video_id = upload['snippet']['resourceId']['videoId']
@@ -285,6 +302,8 @@ class ISROBOT(commands.Bot):
                                                 conn.close()
                                                 break  # Ne traiter qu'une seule nouvelle vidéo à la fois
                                 
+                                except discord.errors.Forbidden as e:
+                                    print(f"Permission Discord refusée pour {channel_name} lors de l'annonce d'une vidéo/short: {e}")
                                 except Exception as e:
                                     print(f"Erreur lors de la vérification des uploads pour {channel_name}: {e}")
                         

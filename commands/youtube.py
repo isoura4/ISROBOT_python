@@ -275,10 +275,17 @@ class checkYouTubeChannel:
         }
         
         async with self.session.get(url, params=params) as response:
+            if response.status == 404:
+                # Le canal n'existe pas ou n'est pas accessible
+                print(f"Canal YouTube introuvable (404): {channel_id}")
+                return []
             if response.status != 200:
-                raise Exception(f"Erreur lors de la récupération de l'ID de playlist: {response.status}")
+                error_data = await response.json() if response.content_type == 'application/json' else {}
+                error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
+                raise Exception(f"Erreur lors de la récupération de l'ID de playlist: {error_msg}")
             data = await response.json()
             if 'items' not in data or len(data['items']) == 0:
+                print(f"Aucune donnée de canal trouvée pour: {channel_id}")
                 return []
             uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
         
@@ -292,8 +299,14 @@ class checkYouTubeChannel:
         }
         
         async with self.session.get(url, params=params) as response:
+            if response.status == 404:
+                # La playlist n'existe pas ou est vide
+                print(f"Playlist d'uploads introuvable (404) pour le canal: {channel_id}")
+                return []
             if response.status != 200:
-                raise Exception(f"Erreur lors de la récupération des vidéos: {response.status}")
+                error_data = await response.json() if response.content_type == 'application/json' else {}
+                error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
+                raise Exception(f"Erreur lors de la récupération des vidéos: {error_msg}")
             data = await response.json()
             return data.get('items', [])
 
@@ -310,8 +323,13 @@ class checkYouTubeChannel:
         }
         
         async with self.session.get(url, params=params) as response:
+            if response.status == 404:
+                print(f"Vidéo YouTube introuvable (404): {video_id}")
+                return None
             if response.status != 200:
-                raise Exception(f"Erreur lors de la récupération des détails de la vidéo: {response.status}")
+                error_data = await response.json() if response.content_type == 'application/json' else {}
+                error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
+                raise Exception(f"Erreur lors de la récupération des détails de la vidéo: {error_msg}")
             data = await response.json()
             if 'items' in data and len(data['items']) > 0:
                 return data['items'][0]
@@ -332,8 +350,13 @@ class checkYouTubeChannel:
         }
         
         async with self.session.get(url, params=params) as response:
+            if response.status == 404:
+                print(f"Canal YouTube introuvable lors de la vérification du live (404): {channel_id}")
+                return []
             if response.status != 200:
-                raise Exception(f"Erreur lors de la vérification du statut live: {response.status}")
+                error_data = await response.json() if response.content_type == 'application/json' else {}
+                error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
+                raise Exception(f"Erreur lors de la vérification du statut live: {error_msg}")
             data = await response.json()
             return data.get('items', [])
 
@@ -381,10 +404,14 @@ class announceYouTube:
         if thumbnail_url:
             embed.set_image(url=thumbnail_url)
         
-        if discord_role is not None:
-            await discord_channel.send(content=discord_role.mention, embed=embed)
-        else:
-            await discord_channel.send(embed=embed)
+        try:
+            if discord_role is not None:
+                await discord_channel.send(content=discord_role.mention, embed=embed)
+            else:
+                await discord_channel.send(embed=embed)
+        except discord.errors.Forbidden as e:
+            # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
+            raise
 
     async def announce_short(self, channel_id: str, channel_name: str, discord_channel: discord.TextChannel, 
                             video_id: str, video_title: str, thumbnail_url: str, 
@@ -401,10 +428,14 @@ class announceYouTube:
         if thumbnail_url:
             embed.set_image(url=thumbnail_url)
         
-        if discord_role is not None:
-            await discord_channel.send(content=discord_role.mention, embed=embed)
-        else:
-            await discord_channel.send(embed=embed)
+        try:
+            if discord_role is not None:
+                await discord_channel.send(content=discord_role.mention, embed=embed)
+            else:
+                await discord_channel.send(embed=embed)
+        except discord.errors.Forbidden as e:
+            # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
+            raise
 
     async def announce_live(self, channel_id: str, channel_name: str, discord_channel: discord.TextChannel, 
                            video_id: str, video_title: str, thumbnail_url: str, 
@@ -421,10 +452,14 @@ class announceYouTube:
         if thumbnail_url:
             embed.set_image(url=thumbnail_url)
         
-        if discord_role is not None:
-            await discord_channel.send(content=discord_role.mention, embed=embed)
-        else:
-            await discord_channel.send(embed=embed)
+        try:
+            if discord_role is not None:
+                await discord_channel.send(content=discord_role.mention, embed=embed)
+            else:
+                await discord_channel.send(embed=embed)
+        except discord.errors.Forbidden as e:
+            # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
+            raise
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(YouTube(bot))
