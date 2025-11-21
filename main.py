@@ -303,6 +303,12 @@ class ISROBOT(commands.Bot):
                                 f"  → Vérification de la chaîne YouTube: "
                                 f"{channel_name}"
                             )
+                            print(
+                                f"    ℹ Notifications activées: "
+                                f"vidéos={bool(notify_videos)}, "
+                                f"shorts={bool(notify_shorts)}, "
+                                f"live={bool(notify_live)}"
+                            )
                             logger.debug(
                                 f"Vérification de {channel_name} "
                                 f"(ID: {channel_id})"
@@ -445,6 +451,21 @@ class ISROBOT(commands.Bot):
                                         )
                                     )
 
+                                    if not latest_uploads:
+                                        print(
+                                            f"      ℹ Aucune vidéo trouvée pour "
+                                            f"{channel_name}"
+                                        )
+                                        logger.debug(
+                                            f"Aucune vidéo trouvée pour "
+                                            f"{channel_name}"
+                                        )
+                                    else:
+                                        print(
+                                            f"      ℹ {len(latest_uploads)} vidéo(s) "
+                                            f"trouvée(s) pour {channel_name}"
+                                        )
+
                                     for upload in latest_uploads:
                                         video_id = upload["snippet"]["resourceId"][
                                             "videoId"
@@ -457,6 +478,14 @@ class ISROBOT(commands.Bot):
                                             )
                                         )
                                         if not video_details:
+                                            print(
+                                                f"        ⚠ Impossible de récupérer "
+                                                f"les détails de la vidéo {video_id}"
+                                            )
+                                            logger.warning(
+                                                f"Impossible de récupérer les détails "
+                                                f"de la vidéo {video_id}"
+                                            )
                                             continue
 
                                         video_title = video_details["snippet"]["title"]
@@ -468,13 +497,19 @@ class ISROBOT(commands.Bot):
                                         ]
 
                                         is_short_video = is_short(duration)
+                                        content_type = "short" if is_short_video else "vidéo"
+
+                                        print(
+                                            f"        → Vérification: {content_type} "
+                                            f"'{video_title[:50]}...' (ID: {video_id[:8]}...)"
+                                        )
 
                                         # Annoncer les shorts
                                         if is_short_video and notify_shorts:
                                             if video_id != last_short_id:
                                                 print(
-                                                    f"      ✓ Nouveau short "
-                                                    f"détecté: {video_title}"
+                                                    f"          ✓ Nouveau short "
+                                                    f"détecté: {video_title[:50]}..."
                                                 )
                                                 logger.debug(
                                                     f"Nouveau short détecté pour "
@@ -504,13 +539,18 @@ class ISROBOT(commands.Bot):
                                                 finally:
                                                     conn.close()
                                                 break  # Ne traiter qu'un seul nouveau short à la fois
+                                            else:
+                                                print(
+                                                    f"          ℹ Short déjà connu "
+                                                    f"(ID: {video_id[:8]}...)"
+                                                )
 
                                         # Annoncer les vidéos normales
                                         elif not is_short_video and notify_videos:
                                             if video_id != last_video_id:
                                                 print(
-                                                    f"      ✓ Nouvelle vidéo "
-                                                    f"détectée: {video_title}"
+                                                    f"          ✓ Nouvelle vidéo "
+                                                    f"détectée: {video_title[:50]}..."
                                                 )
                                                 logger.debug(
                                                     f"Nouvelle vidéo détectée pour "
@@ -540,6 +580,23 @@ class ISROBOT(commands.Bot):
                                                 finally:
                                                     conn.close()
                                                 break  # Ne traiter qu'une seule nouvelle vidéo à la fois
+                                            else:
+                                                print(
+                                                    f"          ℹ Vidéo déjà connue "
+                                                    f"(ID: {video_id[:8]}...)"
+                                                )
+                                        else:
+                                            # Vidéo ignorée car les notifications sont désactivées pour ce type
+                                            if is_short_video and not notify_shorts:
+                                                print(
+                                                    f"          ⊗ Short ignoré "
+                                                    f"(notifications désactivées)"
+                                                )
+                                            elif not is_short_video and not notify_videos:
+                                                print(
+                                                    f"          ⊗ Vidéo ignorée "
+                                                    f"(notifications désactivées)"
+                                                )
 
                                 except discord.errors.Forbidden as e:
                                     logger.error(
