@@ -125,6 +125,7 @@ class ISROBOT(commands.Bot):
     async def check_streams_loop(self):
         """Vérifier périodiquement le statut des streamers."""
         await self.wait_until_ready()  # Attendre que le bot soit prêt
+        logger.info("Démarrage de la boucle de vérification Twitch")
 
         while not self.is_closed():
             try:
@@ -134,12 +135,17 @@ class ISROBOT(commands.Bot):
                     stream_checker = CheckTwitchStatus(self.session)
 
                     # Récupérer tous les streamers de la base de données
-
                     conn = database.get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT * FROM streamers")
-                    streamers = cursor.fetchall()
-                    conn.close()
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT * FROM streamers")
+                        streamers = cursor.fetchall()
+                    finally:
+                        conn.close()
+
+                    logger.debug(
+                        f"Vérification de {len(streamers)} streamer(s) Twitch"
+                    )
 
                     for streamer in streamers:
                         try:
@@ -175,30 +181,41 @@ class ISROBOT(commands.Bot):
 
                                         # Marquer comme annoncé
                                         conn = database.get_db_connection()
+                                        try:
+                                            cursor = conn.cursor()
+                                            cursor.execute(
+                                                "UPDATE streamers SET announced = 1 WHERE id = ?",
+                                                (streamer[0],),
+                                            )
+                                            conn.commit()
+                                            logger.info(
+                                                f"Annonce envoyée pour le streamer {streamer[1]}"
+                                            )
+                                        finally:
+                                            conn.close()
+                            else:
+                                # Le streamer n'est pas en ligne, réinitialiser le statut d'annonce
+                                if streamer[4] == 1:  # Si était annoncé
+                                    conn = database.get_db_connection()
+                                    try:
                                         cursor = conn.cursor()
                                         cursor.execute(
-                                            "UPDATE streamers SET announced = 1 WHERE id = ?",
+                                            "UPDATE streamers SET announced = 0 WHERE id = ?",
                                             (streamer[0],),
                                         )
                                         conn.commit()
+                                        logger.debug(
+                                            f"Statut réinitialisé pour le streamer {streamer[1]}"
+                                        )
+                                    finally:
                                         conn.close()
-                            else:
-                                # Le streamer n'est pas en ligne, réinitialiser le statut d'annonce
-                                conn = database.get_db_connection()
-                                cursor = conn.cursor()
-                                cursor.execute(
-                                    "UPDATE streamers SET announced = 0 WHERE id = ?",
-                                    (streamer[0],),
-                                )
-                                conn.commit()
-                                conn.close()
                         except Exception as e:
-                            print(
+                            logger.error(
                                 f"Erreur lors de la vérification du streamer {streamer[1]}: {e}"
                             )
 
             except Exception as e:
-                print(f"Erreur lors de la vérification des streams: {e}")
+                logger.error(f"Erreur lors de la vérification des streams: {e}")
 
             # Attendre 5 minutes avant la prochaine vérification
             await asyncio.sleep(300)
@@ -206,6 +223,7 @@ class ISROBOT(commands.Bot):
     async def check_youtube_loop(self):
         """Vérifier périodiquement les nouvelles vidéos, shorts et lives YouTube."""
         await self.wait_until_ready()  # Attendre que le bot soit prêt
+        logger.info("Démarrage de la boucle de vérification YouTube")
 
         while not self.is_closed():
             try:
@@ -219,12 +237,17 @@ class ISROBOT(commands.Bot):
                     youtube_checker = CheckYouTubeChannel(self.session)
 
                     # Récupérer toutes les chaînes YouTube de la base de données
-
                     conn = database.get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT * FROM youtube_channels")
-                    channels = cursor.fetchall()
-                    conn.close()
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT * FROM youtube_channels")
+                        channels = cursor.fetchall()
+                    finally:
+                        conn.close()
+
+                    logger.debug(
+                        f"Vérification de {len(channels)} chaîne(s) YouTube"
+                    )
 
                     for channel_data in channels:
                         try:
@@ -296,24 +319,34 @@ class ISROBOT(commands.Bot):
 
                                             # Mettre à jour lastLiveId
                                             conn = database.get_db_connection()
-                                            cursor = conn.cursor()
-                                            cursor.execute(
-                                                "UPDATE youtube_channels SET lastLiveId = ? WHERE id = ?",
-                                                (live_id, channel_data[0]),
-                                            )
-                                            conn.commit()
-                                            conn.close()
+                                            try:
+                                                cursor = conn.cursor()
+                                                cursor.execute(
+                                                    "UPDATE youtube_channels SET lastLiveId = ? WHERE id = ?",
+                                                    (live_id, channel_data[0]),
+                                                )
+                                                conn.commit()
+                                                logger.info(
+                                                    f"Annonce live envoyée pour {channel_name}"
+                                                )
+                                            finally:
+                                                conn.close()
                                     else:
                                         # Pas de live en cours, réinitialiser lastLiveId
                                         if last_live_id:
                                             conn = database.get_db_connection()
-                                            cursor = conn.cursor()
-                                            cursor.execute(
-                                                "UPDATE youtube_channels SET lastLiveId = NULL WHERE id = ?",
-                                                (channel_data[0],),
-                                            )
-                                            conn.commit()
-                                            conn.close()
+                                            try:
+                                                cursor = conn.cursor()
+                                                cursor.execute(
+                                                    "UPDATE youtube_channels SET lastLiveId = NULL WHERE id = ?",
+                                                    (channel_data[0],),
+                                                )
+                                                conn.commit()
+                                                logger.debug(
+                                                    f"Réinitialisation lastLiveId pour {channel_name}"
+                                                )
+                                            finally:
+                                                conn.close()
                                 except discord.errors.Forbidden as e:
                                     logger.error(
                                         f"Permission Discord refusée pour {channel_name} lors de l'annonce du live: {e}"
@@ -371,13 +404,18 @@ class ISROBOT(commands.Bot):
 
                                                 # Mettre à jour lastShortId
                                                 conn = database.get_db_connection()
-                                                cursor = conn.cursor()
-                                                cursor.execute(
-                                                    "UPDATE youtube_channels SET lastShortId = ? WHERE id = ?",
-                                                    (video_id, channel_data[0]),
-                                                )
-                                                conn.commit()
-                                                conn.close()
+                                                try:
+                                                    cursor = conn.cursor()
+                                                    cursor.execute(
+                                                        "UPDATE youtube_channels SET lastShortId = ? WHERE id = ?",
+                                                        (video_id, channel_data[0]),
+                                                    )
+                                                    conn.commit()
+                                                    logger.info(
+                                                        f"Annonce short envoyée pour {channel_name}"
+                                                    )
+                                                finally:
+                                                    conn.close()
                                                 break  # Ne traiter qu'un seul nouveau short à la fois
 
                                         # Annoncer les vidéos normales
@@ -394,13 +432,18 @@ class ISROBOT(commands.Bot):
 
                                                 # Mettre à jour lastVideoId
                                                 conn = database.get_db_connection()
-                                                cursor = conn.cursor()
-                                                cursor.execute(
-                                                    "UPDATE youtube_channels SET lastVideoId = ? WHERE id = ?",
-                                                    (video_id, channel_data[0]),
-                                                )
-                                                conn.commit()
-                                                conn.close()
+                                                try:
+                                                    cursor = conn.cursor()
+                                                    cursor.execute(
+                                                        "UPDATE youtube_channels SET lastVideoId = ? WHERE id = ?",
+                                                        (video_id, channel_data[0]),
+                                                    )
+                                                    conn.commit()
+                                                    logger.info(
+                                                        f"Annonce vidéo envoyée pour {channel_name}"
+                                                    )
+                                                finally:
+                                                    conn.close()
                                                 break  # Ne traiter qu'une seule nouvelle vidéo à la fois
 
                                 except discord.errors.Forbidden as e:
