@@ -131,7 +131,7 @@ class Stream(commands.Cog):
         await interaction.response.send_message(f"Streamer retiré : {streamer_name}")
 
 
-class getTwitchOAuth:
+class GetTwitchOAuth:
     """Classe pour gérer l'authentification avec l'API Twitch."""
 
     def __init__(self, session: aiohttp.ClientSession):
@@ -159,7 +159,7 @@ class getTwitchOAuth:
             return data["access_token"]
 
 
-class startStreamCheckInterval:
+class StartStreamCheckInterval:
     """Classe pour démarrer un intervalle de vérification des streamers."""
 
     def __init__(self, bot: commands.Bot, interval: int = 60):
@@ -181,12 +181,12 @@ class startStreamCheckInterval:
             await asyncio.sleep(self.interval)
 
 
-class checkTwitchStatus:
+class CheckTwitchStatus:
     """Classe pour vérifier le statut des streamers sur Twitch."""
 
     def __init__(self, session: aiohttp.ClientSession):
         self.session = session
-        self.oauth = getTwitchOAuth(session)
+        self.oauth = GetTwitchOAuth(session)
 
     async def check_streamer_status(self, streamer_name: str):
         """Vérifier si un streamer est en ligne."""
@@ -203,7 +203,7 @@ class checkTwitchStatus:
             return data["data"]
 
 
-class announceStream:
+class AnnounceStream:
     """Classe pour annoncer le début d'un stream."""
 
     def __init__(self, bot: commands.Bot):
