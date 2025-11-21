@@ -15,7 +15,7 @@ SERVER_ID = int(os.getenv("server_id", "0"))
 DB_PATH = os.getenv("db_path")
 
 
-class count(commands.Cog):
+class Count(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
@@ -91,4 +91,4 @@ class count(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(count(bot))
+    await bot.add_cog(Count(bot))

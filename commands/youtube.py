@@ -51,7 +51,7 @@ class YouTube(commands.Cog):
         # Vérifier si le channel_id est valide ou si c'est un handle
         try:
             async with aiohttp.ClientSession() as session:
-                checker = checkYouTubeChannel(session)
+                checker = CheckYouTubeChannel(session)
 
                 # Si l'entrée commence par @, c'est un handle
                 if channel_id.startswith("@"):
@@ -186,7 +186,7 @@ class YouTube(commands.Cog):
             )
 
 
-class checkYouTubeChannel:
+class CheckYouTubeChannel:
     """Classe pour vérifier les informations d'une chaîne YouTube."""
 
     def __init__(self, session: aiohttp.ClientSession):
@@ -486,7 +486,7 @@ def is_short(video_duration: str) -> bool:
     return False
 
 
-class announceYouTube:
+class AnnounceYouTube:
     """Classe pour annoncer les nouveaux contenus YouTube."""
 
     def __init__(self, bot: commands.Bot):

@@ -128,10 +128,10 @@ class ISROBOT(commands.Bot):
 
         while not self.is_closed():
             try:
-                from commands.stream import checkTwitchStatus
+                from commands.stream import CheckTwitchStatus
 
                 if self.session:
-                    stream_checker = checkTwitchStatus(self.session)
+                    stream_checker = CheckTwitchStatus(self.session)
 
                     # Récupérer tous les streamers de la base de données
 
@@ -158,9 +158,9 @@ class ISROBOT(commands.Bot):
                                     if channel and isinstance(
                                         channel, discord.TextChannel
                                     ):
-                                        from commands.stream import announceStream
+                                        from commands.stream import AnnounceStream
 
-                                        announcer = announceStream(self)
+                                        announcer = AnnounceStream(self)
                                         # stream_data est une liste, on prend le premier élément
                                         stream_info = stream_data[0]
                                         stream_title = stream_info.get(
@@ -210,13 +210,13 @@ class ISROBOT(commands.Bot):
         while not self.is_closed():
             try:
                 from commands.youtube import (
-                    announceYouTube,
-                    checkYouTubeChannel,
+                    AnnounceYouTube,
+                    CheckYouTubeChannel,
                     is_short,
                 )
 
                 if self.session:
-                    youtube_checker = checkYouTubeChannel(self.session)
+                    youtube_checker = CheckYouTubeChannel(self.session)
 
                     # Récupérer toutes les chaînes YouTube de la base de données
 
@@ -265,7 +265,7 @@ class ISROBOT(commands.Bot):
                                     )
                                     continue
 
-                            announcer = announceYouTube(self)
+                            announcer = AnnounceYouTube(self)
 
                             # Vérifier les lives
                             if notify_live:
