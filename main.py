@@ -149,18 +149,27 @@ class ISROBOT(commands.Bot):
 
                     for streamer in streamers:
                         try:
+                            # Database schema: streamers table
+                            # [0]=id, [1]=streamerName, [2]=streamChannelId,
+                            # [3]=roleId, [4]=announced, [5]=startTime
+                            
+                            streamer_id = streamer[0]
+                            streamer_name = streamer[1]
+                            stream_channel_id = streamer[2]
+                            announced = streamer[4]
+                            
                             # Vérifier si le streamer est en ligne
                             stream_data = await stream_checker.check_streamer_status(
-                                streamer[1]
-                            )  # streamerName
+                                streamer_name
+                            )
                             if (
                                 stream_data and len(stream_data) > 0
                             ):  # Si des données sont retournées, le streamer est en ligne
                                 # Vérifier si on a déjà annoncé ce stream
-                                if streamer[4] == 0:  # announced = 0
+                                if announced == 0:
                                     channel = self.get_channel(
-                                        int(streamer[2])
-                                    )  # streamChannelId
+                                        int(stream_channel_id)
+                                    )
                                     if channel and isinstance(
                                         channel, discord.TextChannel
                                     ):
@@ -176,7 +185,7 @@ class ISROBOT(commands.Bot):
                                             "game_name", "Inconnu"
                                         )
                                         await announcer.announce(
-                                            streamer[1], channel, stream_title, category
+                                            streamer_name, channel, stream_title, category
                                         )
 
                                         # Marquer comme annoncé
@@ -185,27 +194,27 @@ class ISROBOT(commands.Bot):
                                             cursor = conn.cursor()
                                             cursor.execute(
                                                 "UPDATE streamers SET announced = 1 WHERE id = ?",
-                                                (streamer[0],),
+                                                (streamer_id,),
                                             )
                                             conn.commit()
                                             logger.info(
-                                                f"Annonce envoyée pour le streamer {streamer[1]}"
+                                                f"Annonce envoyée pour le streamer {streamer_name}"
                                             )
                                         finally:
                                             conn.close()
                             else:
                                 # Le streamer n'est pas en ligne, réinitialiser le statut d'annonce
-                                if streamer[4] == 1:  # Si était annoncé
+                                if announced == 1:  # Si était annoncé
                                     conn = database.get_db_connection()
                                     try:
                                         cursor = conn.cursor()
                                         cursor.execute(
                                             "UPDATE streamers SET announced = 0 WHERE id = ?",
-                                            (streamer[0],),
+                                            (streamer_id,),
                                         )
                                         conn.commit()
                                         logger.debug(
-                                            f"Statut réinitialisé pour le streamer {streamer[1]}"
+                                            f"Statut réinitialisé pour le streamer {streamer_name}"
                                         )
                                     finally:
                                         conn.close()

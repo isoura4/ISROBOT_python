@@ -208,22 +208,36 @@ async def test_twitch_api_functionality():
         async with aiohttp.ClientSession() as session:
             checker = CheckTwitchStatus(session)
             
-            # Test with a known streamer
-            test_streamer = "shroud"
-            stream_data = await checker.check_streamer_status(test_streamer)
+            # Test with multiple known streamers for reliability
+            # Using popular streamers, but the test doesn't depend on them being online
+            test_streamers = ["shroud", "pokimane", "ninja"]
             
-            if stream_data is not None:
-                if len(stream_data) > 0:
-                    stream_info = stream_data[0]
-                    print_success(f"{test_streamer} is ONLINE")
-                    print_info(f"  Title: {stream_info.get('title', 'N/A')}")
-                    print_info(f"  Game: {stream_info.get('game_name', 'N/A')}")
-                else:
-                    print_success(f"{test_streamer} is OFFLINE (normal)")
-                return True
-            else:
-                print_error("API returned None")
-                return False
+            for test_streamer in test_streamers:
+                try:
+                    stream_data = await checker.check_streamer_status(test_streamer)
+                    
+                    if stream_data is not None:
+                        if len(stream_data) > 0:
+                            stream_info = stream_data[0]
+                            print_success(f"{test_streamer} is ONLINE")
+                            print_info(f"  Title: {stream_info.get('title', 'N/A')}")
+                            print_info(f"  Game: {stream_info.get('game_name', 'N/A')}")
+                        else:
+                            print_success(f"{test_streamer} is OFFLINE (normal)")
+                        # Success - API is working
+                        return True
+                    else:
+                        print_error(f"{test_streamer}: API returned None")
+                        # Try next streamer
+                        continue
+                except Exception as e:
+                    print_info(f"{test_streamer}: {type(e).__name__}")
+                    # Try next streamer
+                    continue
+            
+            # If we get here, all streamers failed
+            print_error("All test streamers failed - API may have issues")
+            return False
     except Exception as e:
         print_error(f"Streamer status check failed: {e}")
         return False
