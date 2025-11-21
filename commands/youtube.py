@@ -530,7 +530,7 @@ class announceYouTube:
             else:
                 await discord_channel.send(embed=embed)
         except discord.errors.Forbidden as e:
-            # Propager l\'erreur pour qu\'elle soit capturée au niveau supérieur
+            # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
             raise
 
     async def announce_short(
@@ -561,7 +561,7 @@ class announceYouTube:
             else:
                 await discord_channel.send(embed=embed)
         except discord.errors.Forbidden as e:
-            # Propager l\'erreur pour qu\'elle soit capturée au niveau supérieur
+            # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
             raise
 
     async def announce_live(
@@ -594,6 +594,7 @@ class announceYouTube:
         except discord.errors.Forbidden as e:
             # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
             raise
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(YouTube(bot))

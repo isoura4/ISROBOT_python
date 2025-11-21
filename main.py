@@ -314,8 +314,18 @@ class ISROBOT(commands.Bot):
                                             )
                                             conn.commit()
                                             conn.close()
-                                except Exception as e:
+                                except discord.errors.Forbidden as e:
+
                                     logger.error(
+
+                                        f"Permission Discord refusée pour {channel_name} lors de l\'annonce du live: {e}"
+
+                                    )
+
+                                except Exception as e:
+
+                                    logger.error(
+
                                         f"Erreur lors de la vérification du live pour {channel_name}: {e}"
                                     )
 
@@ -406,8 +416,24 @@ class ISROBOT(commands.Bot):
                                                 conn.close()
                                                 break  # Ne traiter qu'une seule nouvelle vidéo à la fois
 
-                                except Exception as e:
+                                except discord.errors.Forbidden as e:
+
+
                                     logger.error(
+
+
+                                        f"Permission Discord refusée pour {channel_name} lors de l\'annonce d\'une vidéo/short: {e}"
+
+
+                                    )
+
+
+                                except Exception as e:
+
+
+                                    logger.error(
+
+
                                         f"Erreur lors de la vérification des uploads pour {channel_name}: {e}"
                                     )
 
