@@ -7,14 +7,25 @@ import dotenv
 dotenv.load_dotenv()
 
 # Chemin vers la base de données SQLite
-DB_PATH = os.getenv("db_path")
+# Convertir en chemin absolu pour éviter les problèmes de localisation
+_db_path = os.getenv("db_path")
+if _db_path:
+    # Si le chemin est relatif, le rendre absolu par rapport au répertoire du script
+    if not os.path.isabs(_db_path):
+        script_dir = os.path.dirname(__file__)
+        DB_PATH = os.path.abspath(os.path.join(script_dir, _db_path))
+    else:
+        DB_PATH = _db_path
+else:
+    DB_PATH = None
 
 
 def get_db_connection():
     """Crée une connexion à la base de données SQLite."""
     if not DB_PATH:
         raise ValueError(
-            "Le chemin de la base de données n'est pas défini dans les variables d'environnement."
+            "Le chemin de la base de données n'est pas défini "
+            "dans les variables d'environnement."
         )
 
     conn = sqlite3.connect(DB_PATH)
@@ -26,15 +37,24 @@ def create_database():
     """Crée la base de données et les tables nécessaires."""
     if not DB_PATH:
         raise ValueError(
-            "Le chemin de la base de données n'est pas défini dans les variables d'environnement."
+            "Le chemin de la base de données n'est pas défini "
+            "dans les variables d'environnement."
         )
 
-    if os.path.exists(DB_PATH):
-        print("La base de données existe déjà.")
+    db_existed = os.path.exists(DB_PATH)
+    if db_existed:
+        print(
+            f"La base de données existe déjà à l'emplacement: {DB_PATH}"
+        )
     else:
-        print("La base de données n'existe pas, elle va être créée.")
+        print(
+            f"La base de données n'existe pas, elle va être créée "
+            f"à l'emplacement: {DB_PATH}"
+        )
 
     # Créer les tables nécessaires (toujours exécuter cette partie)
+    # CREATE TABLE IF NOT EXISTS permet de créer uniquement si la table n'existe pas
+    # et ne supprime PAS les données existantes
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -104,7 +124,14 @@ def create_database():
 
     conn.commit()
     conn.close()
-    print("Base de données et tables créées avec succès.")
+
+    if db_existed:
+        print(
+            "Tables vérifiées et créées si nécessaire "
+            "(données existantes préservées)."
+        )
+    else:
+        print("Base de données et tables créées avec succès.")
 
 
 if __name__ == "__main__":

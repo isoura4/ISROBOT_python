@@ -38,13 +38,11 @@ class Count(commands.Cog):
 
         if not DB_PATH:
             await interaction.response.send_message(
-                "Le chemin de la base de données n'est pas défini dans les variables d'environnement.",
+                "Le chemin de la base de données n'est pas défini "
+                "dans les variables d'environnement.",
                 ephemeral=True,
             )
             return
-
-        # Créer la base de données et les tables si elles n'existent pas
-        database.create_database()
 
         # Enregistrer la configuration dans la base de données
         conn = database.get_db_connection()
@@ -59,7 +57,8 @@ class Count(commands.Cog):
 
         if existing:
             await interaction.response.send_message(
-                f"Le minijeux du compteur est déjà configuré dans le salon {channel.mention}.",
+                f"Le minijeux du compteur est déjà configuré "
+                f"dans le salon {channel.mention}.",
                 ephemeral=True,
             )
             conn.close()
@@ -68,7 +67,8 @@ class Count(commands.Cog):
         # Insérer la nouvelle configuration
         cursor.execute(
             """
-            INSERT INTO counter_game (guildId, channelId, messageId, userId, lastUserId, count)
+            INSERT INTO counter_game
+            (guildId, channelId, messageId, userId, lastUserId, count)
             VALUES (?, ?, ?, ?, ?, ?)
         """,
             (
@@ -85,7 +85,8 @@ class Count(commands.Cog):
         conn.close()
 
         await interaction.response.send_message(
-            f"Le minijeux du compteur a été configuré dans le salon {channel.mention}.",
+            f"Le minijeux du compteur a été configuré "
+            f"dans le salon {channel.mention}.",
             ephemeral=True,
         )
 
