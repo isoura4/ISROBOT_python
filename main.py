@@ -259,6 +259,9 @@ class ISROBOT(commands.Bot):
         """Vérifier périodiquement les nouvelles vidéos, shorts et lives YouTube."""
         await self.wait_until_ready()  # Attendre que le bot soit prêt
         logger.info("Démarrage de la boucle de vérification YouTube")
+        
+        # Compteur pour vérifier les lives moins souvent (toutes les 2 boucles = ~20 min)
+        live_check_counter = 0
 
         while not self.is_closed():
             try:
@@ -351,15 +354,14 @@ class ISROBOT(commands.Bot):
                                     f"Aucune notification activée pour {channel_name}"
                                 )
                                 continue
+                            
+                            # Ne vérifier les lives que toutes les 2 boucles (économiser le quota API - 100 unités par vérification!)
+                            should_check_live = (live_check_counter % 2 == 0)
 
-                            # Vérifier les lives
-                            if notify_live:
+                            # Vérifier les lives (seulement si activé et si c'est le bon cycle)
+                            if notify_live and should_check_live:
                                 print(
                                     f"    → Vérification des lives pour "
-                                    f"{channel_name}"
-                                )
-                                logger.debug(
-                                    f"Vérification du statut live pour "
                                     f"{channel_name}"
                                 )
                                 try:
@@ -443,6 +445,11 @@ class ISROBOT(commands.Bot):
                                     logger.error(
                                         f"Erreur lors de la vérification du live pour {channel_name}: {e}"
                                     )
+                            elif notify_live and not should_check_live:
+                                print(
+                                    f"    ⊗ Vérification des lives ignorée pour {channel_name} "
+                                    f"(économie du quota API - vérification 1x/2 cycles)"
+                                )
 
                             # Vérifier les nouvelles vidéos et shorts
                             if notify_videos or notify_shorts:
@@ -625,10 +632,25 @@ class ISROBOT(commands.Bot):
                             )
 
             except Exception as e:
-                logger.error(f"Erreur lors de la vérification YouTube: {e}")
+                error_msg = str(e)
+                # Détecter les erreurs de quota
+                if "quota" in error_msg.lower() or "403" in error_msg:
+                    logger.error(
+                        f"⚠️ QUOTA API YOUTUBE DÉPASSÉ! Vérification ignorée. "
+                        f"Le quota se réinitialise à minuit PST. Erreur: {e}"
+                    )
+                    print(
+                        f"❌ [YouTube] Quota API dépassé! "
+                        f"Prochaine tentative dans 30 minutes."
+                    )
+                else:
+                    logger.error(f"Erreur lors de la vérification YouTube: {e}")
+            
+            # Incrémenter le compteur de vérification live
+            live_check_counter += 1
 
-            # Attendre 5 minutes avant la prochaine vérification
-            await asyncio.sleep(300)
+            # Attendre 10 minutes avant la prochaine vérification (optimisé pour ~9500 unités/jour)
+            await asyncio.sleep(600)
 
     async def reset_counter_game(
         self, message: discord.Message, cursor, conn, error_message: str
