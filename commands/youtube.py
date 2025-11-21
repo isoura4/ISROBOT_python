@@ -286,7 +286,7 @@ class checkYouTubeChannel:
             if response.status != 200:
                 try:
                     error_data = await response.json() if response.content_type == 'application/json' else {}
-                except (aiohttp.ContentTypeError, ValueError, Exception):
+                except (aiohttp.ContentTypeError, ValueError):
                     error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la récupération de l'ID de playlist: {error_msg}")
@@ -317,7 +317,7 @@ class checkYouTubeChannel:
             if response.status != 200:
                 try:
                     error_data = await response.json() if response.content_type == 'application/json' else {}
-                except (aiohttp.ContentTypeError, ValueError, Exception):
+                except (aiohttp.ContentTypeError, ValueError):
                     error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la récupération des vidéos: {error_msg}")
@@ -347,7 +347,7 @@ class checkYouTubeChannel:
             if response.status != 200:
                 try:
                     error_data = await response.json() if response.content_type == 'application/json' else {}
-                except (aiohttp.ContentTypeError, ValueError, Exception):
+                except (aiohttp.ContentTypeError, ValueError):
                     error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la récupération des détails de la vidéo: {error_msg}")
@@ -381,7 +381,7 @@ class checkYouTubeChannel:
             if response.status != 200:
                 try:
                     error_data = await response.json() if response.content_type == 'application/json' else {}
-                except (aiohttp.ContentTypeError, ValueError, Exception):
+                except (aiohttp.ContentTypeError, ValueError):
                     error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la vérification du statut live: {error_msg}")
