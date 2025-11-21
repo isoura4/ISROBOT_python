@@ -1,6 +1,5 @@
 import asyncio
 import os
-import sqlite3
 from typing import Optional
 
 import aiohttp
@@ -8,6 +7,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
+
+import database
 
 # Chargement du fichier .env
 load_dotenv()
@@ -43,7 +44,7 @@ class Stream(commands.Cog):
         else:
             # Connexion à la base de données SQLite:
             # Vérifier si le streamer existe déjà dans la base de données
-            conn = sqlite3.connect("database.sqlite3")
+            conn = database.get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT * FROM streamers WHERE streamerName = ? AND streamChannelId = ?",
@@ -59,7 +60,7 @@ class Stream(commands.Cog):
                 return
             if result is None:
                 # Ajouter le streamer et le channel id sélectionné à la base de données
-                conn = sqlite3.connect("database.sqlite3")
+                conn = database.get_db_connection()
                 cursor = conn.cursor()
                 cursor.execute(
                     "INSERT INTO streamers (streamerName, streamChannelId, roleId) VALUES (?, ?, ?)",
@@ -83,7 +84,7 @@ class Stream(commands.Cog):
     async def check_streams(self):
         """Vérifier le statut de tous les streamers dans la base de données."""
         try:
-            conn = sqlite3.connect("database.sqlite3")
+            conn = database.get_db_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM streamers")
             streamers = cursor.fetchall()
@@ -106,7 +107,7 @@ class Stream(commands.Cog):
     async def stream_remove(self, interaction: discord.Interaction, streamer_name: str):
         """Retirer un streamer de la liste des streamers."""
         if not streamer_name:
-            conn = sqlite3.connect("database.sqlite3")
+            conn = database.get_db_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT streamerName FROM streamers")
             streamers = cursor.fetchall()
@@ -122,7 +123,7 @@ class Stream(commands.Cog):
             )
             return
         # Logique pour retirer le streamer de la base de données
-        conn = sqlite3.connect("database.sqlite3")
+        conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM streamers WHERE streamerName = ?", (streamer_name,))
         conn.commit()
@@ -210,7 +211,7 @@ class announceStream:
 
     async def get_role(self, streamer_name: str):
         """Récupérer le rôle à mentionner pour les annonces."""
-        conn = sqlite3.connect("database.sqlite3")
+        conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             "SELECT roleId FROM streamers WHERE streamerName = ?", (streamer_name,)

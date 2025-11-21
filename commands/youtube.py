@@ -1,6 +1,5 @@
 import logging
 import os
-import sqlite3
 from typing import Optional
 
 import aiohttp
@@ -8,6 +7,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
+
+import database
 
 # Chargement du fichier .env
 load_dotenv()
@@ -85,7 +86,7 @@ class YouTube(commands.Cog):
             return
 
         # Vérifier si la chaîne existe déjà dans la base de données
-        conn = sqlite3.connect("database.sqlite3")
+        conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             "SELECT * FROM youtube_channels WHERE channelId = ? AND discordChannelId = ?",
@@ -101,7 +102,7 @@ class YouTube(commands.Cog):
             return
 
         # Ajouter la chaîne à la base de données
-        conn = sqlite3.connect("database.sqlite3")
+        conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO youtube_channels
@@ -149,7 +150,7 @@ class YouTube(commands.Cog):
     async def youtube_remove(self, interaction: discord.Interaction, channel_name: str):
         """Retirer une chaîne YouTube de la liste de surveillance."""
         if not channel_name:
-            conn = sqlite3.connect("database.sqlite3")
+            conn = database.get_db_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT channelName FROM youtube_channels")
             channels = cursor.fetchall()
@@ -166,7 +167,7 @@ class YouTube(commands.Cog):
             return
 
         # Retirer la chaîne de la base de données
-        conn = sqlite3.connect("database.sqlite3")
+        conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             "DELETE FROM youtube_channels WHERE channelName = ?", (channel_name,)
@@ -493,7 +494,7 @@ class announceYouTube:
 
     async def get_role(self, channel_id: str):
         """Récupérer le rôle à mentionner pour les annonces."""
-        conn = sqlite3.connect("database.sqlite3")
+        conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             "SELECT roleId FROM youtube_channels WHERE channelId = ?", (channel_id,)

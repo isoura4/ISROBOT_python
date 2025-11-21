@@ -9,6 +9,8 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
+import database
+
 # Chargement du fichier .env
 load_dotenv()
 
@@ -132,9 +134,8 @@ class ISROBOT(commands.Bot):
                     stream_checker = checkTwitchStatus(self.session)
 
                     # Récupérer tous les streamers de la base de données
-                    import sqlite3
 
-                    conn = sqlite3.connect("database.sqlite3")
+                    conn = database.get_db_connection()
                     cursor = conn.cursor()
                     cursor.execute("SELECT * FROM streamers")
                     streamers = cursor.fetchall()
@@ -173,7 +174,7 @@ class ISROBOT(commands.Bot):
                                         )
 
                                         # Marquer comme annoncé
-                                        conn = sqlite3.connect("database.sqlite3")
+                                        conn = database.get_db_connection()
                                         cursor = conn.cursor()
                                         cursor.execute(
                                             "UPDATE streamers SET announced = 1 WHERE id = ?",
@@ -183,7 +184,7 @@ class ISROBOT(commands.Bot):
                                         conn.close()
                             else:
                                 # Le streamer n'est pas en ligne, réinitialiser le statut d'annonce
-                                conn = sqlite3.connect("database.sqlite3")
+                                conn = database.get_db_connection()
                                 cursor = conn.cursor()
                                 cursor.execute(
                                     "UPDATE streamers SET announced = 0 WHERE id = ?",
@@ -218,9 +219,8 @@ class ISROBOT(commands.Bot):
                     youtube_checker = checkYouTubeChannel(self.session)
 
                     # Récupérer toutes les chaînes YouTube de la base de données
-                    import sqlite3
 
-                    conn = sqlite3.connect("database.sqlite3")
+                    conn = database.get_db_connection()
                     cursor = conn.cursor()
                     cursor.execute("SELECT * FROM youtube_channels")
                     channels = cursor.fetchall()
@@ -295,7 +295,7 @@ class ISROBOT(commands.Bot):
                                             )
 
                                             # Mettre à jour lastLiveId
-                                            conn = sqlite3.connect("database.sqlite3")
+                                            conn = database.get_db_connection()
                                             cursor = conn.cursor()
                                             cursor.execute(
                                                 "UPDATE youtube_channels SET lastLiveId = ? WHERE id = ?",
@@ -306,7 +306,7 @@ class ISROBOT(commands.Bot):
                                     else:
                                         # Pas de live en cours, réinitialiser lastLiveId
                                         if last_live_id:
-                                            conn = sqlite3.connect("database.sqlite3")
+                                            conn = database.get_db_connection()
                                             cursor = conn.cursor()
                                             cursor.execute(
                                                 "UPDATE youtube_channels SET lastLiveId = NULL WHERE id = ?",
@@ -370,9 +370,7 @@ class ISROBOT(commands.Bot):
                                                 )
 
                                                 # Mettre à jour lastShortId
-                                                conn = sqlite3.connect(
-                                                    "database.sqlite3"
-                                                )
+                                                conn = database.get_db_connection()
                                                 cursor = conn.cursor()
                                                 cursor.execute(
                                                     "UPDATE youtube_channels SET lastShortId = ? WHERE id = ?",
@@ -395,9 +393,7 @@ class ISROBOT(commands.Bot):
                                                 )
 
                                                 # Mettre à jour lastVideoId
-                                                conn = sqlite3.connect(
-                                                    "database.sqlite3"
-                                                )
+                                                conn = database.get_db_connection()
                                                 cursor = conn.cursor()
                                                 cursor.execute(
                                                     "UPDATE youtube_channels SET lastVideoId = ? WHERE id = ?",
