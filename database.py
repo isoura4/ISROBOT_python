@@ -23,7 +23,8 @@ def get_db_connection():
     """Crée une connexion à la base de données SQLite."""
     if not DB_PATH:
         raise ValueError(
-            "Le chemin de la base de données n'est pas défini dans les variables d'environnement."
+            "Le chemin de la base de données n'est pas défini "
+            "dans les variables d'environnement."
         )
 
     conn = sqlite3.connect(DB_PATH)
@@ -35,14 +36,20 @@ def create_database():
     """Crée la base de données et les tables nécessaires."""
     if not DB_PATH:
         raise ValueError(
-            "Le chemin de la base de données n'est pas défini dans les variables d'environnement."
+            "Le chemin de la base de données n'est pas défini "
+            "dans les variables d'environnement."
         )
 
     db_existed = os.path.exists(DB_PATH)
     if db_existed:
-        print(f"La base de données existe déjà à l'emplacement: {DB_PATH}")
+        print(
+            f"La base de données existe déjà à l'emplacement: {DB_PATH}"
+        )
     else:
-        print(f"La base de données n'existe pas, elle va être créée à l'emplacement: {DB_PATH}")
+        print(
+            f"La base de données n'existe pas, elle va être créée "
+            f"à l'emplacement: {DB_PATH}"
+        )
 
     # Créer les tables nécessaires (toujours exécuter cette partie)
     # CREATE TABLE IF NOT EXISTS permet de créer uniquement si la table n'existe pas
@@ -116,9 +123,12 @@ def create_database():
 
     conn.commit()
     conn.close()
-    
+
     if db_existed:
-        print("Tables vérifiées et créées si nécessaire (données existantes préservées).")
+        print(
+            "Tables vérifiées et créées si nécessaire "
+            "(données existantes préservées)."
+        )
     else:
         print("Base de données et tables créées avec succès.")
 
