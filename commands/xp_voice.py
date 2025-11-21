@@ -1,22 +1,23 @@
-import os
-import discord
-import sqlite3
-import random
 import math
-from typing import Dict, Tuple, Optional, Union
-from dotenv import load_dotenv
+import os
+import random
+from typing import Dict, Optional, Tuple, Union
+
+import discord
 from discord.ext import commands, tasks
+from dotenv import load_dotenv
 
 # Chargement du fichier .env
 load_dotenv()
 
 # Récupération des variables d'environnement
-SERVER_ID = int(os.getenv('server_id', '0'))
+SERVER_ID = int(os.getenv("server_id", "0"))
 
 # Configuration du système d'XP
 LEVEL_MULTIPLIER = 125  # Doit matcher xp_system.py
-VOICE_XP_MIN = 15       # XP min par heure en vocal
-VOICE_XP_MAX = 25       # XP max par heure en vocal
+VOICE_XP_MIN = 15  # XP min par heure en vocal
+VOICE_XP_MAX = 25  # XP max par heure en vocal
+
 
 class VoiceXP(commands.Cog):
     """Attribue de l'XP toutes les heures aux membres présents en vocal."""
@@ -38,6 +39,7 @@ class VoiceXP(commands.Cog):
     # --- Utilitaires DB & calcul de niveau ---
     def get_db_connection(self):
         from database import get_db_connection
+
         return get_db_connection()
 
     def calculate_level_from_xp(self, xp: float) -> int:
@@ -64,7 +66,7 @@ class VoiceXP(commands.Cog):
 
             cursor.execute(
                 """
-                UPDATE users 
+                UPDATE users
                 SET xp = ?, level = ?, messages = ?
                 WHERE guildId = ? AND userId = ?
                 """,
@@ -78,7 +80,7 @@ class VoiceXP(commands.Cog):
             messages = 0
             cursor.execute(
                 """
-                INSERT INTO users (guildId, userId, xp, level, messages, coins, corners) 
+                INSERT INTO users (guildId, userId, xp, level, messages, coins, corners)
                 VALUES (?, ?, ?, ?, ?, 0, 0)
                 """,
                 (str(guild_id), str(user_id), new_xp, new_level, messages),
@@ -97,7 +99,12 @@ class VoiceXP(commands.Cog):
 
     # --- Gestion des états vocaux ---
     @commands.Cog.listener()
-    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+    ):
         # Ignorer les bots et les autres serveurs si nécessaire
         if member.bot:
             return
@@ -107,7 +114,10 @@ class VoiceXP(commands.Cog):
         key = (member.guild.id, member.id)
         afk_channel = member.guild.afk_channel
 
-        def eligible(channel: Optional[Union[discord.VoiceChannel, discord.StageChannel]], state: discord.VoiceState) -> bool:
+        def eligible(
+            channel: Optional[Union[discord.VoiceChannel, discord.StageChannel]],
+            state: discord.VoiceState,
+        ) -> bool:
             if channel is None:
                 return False
             if afk_channel and channel.id == afk_channel.id:
@@ -169,7 +179,9 @@ class VoiceXP(commands.Cog):
                 try:
                     self.add_voice_xp(guild_id, user_id, total_xp)
                 except Exception as e:
-                    print(f"Erreur lors de l'attribution d'XP vocal à {user_id} sur {guild_id}: {e}")
+                    print(
+                        f"Erreur lors de l'attribution d'XP vocal à {user_id} sur {guild_id}: {e}"
+                    )
                     continue
 
                 # Mettre à jour le timestamp d'attribution pour conserver la/les heure(s) restante(s)
