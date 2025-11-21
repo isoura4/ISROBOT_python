@@ -12,7 +12,8 @@ _db_path = os.getenv("db_path")
 if _db_path:
     # Si le chemin est relatif, le rendre absolu par rapport au répertoire du script
     if not os.path.isabs(_db_path):
-        DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), _db_path))
+        script_dir = os.path.dirname(__file__)
+        DB_PATH = os.path.abspath(os.path.join(script_dir, _db_path))
     else:
         DB_PATH = _db_path
 else:
