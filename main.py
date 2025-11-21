@@ -25,6 +25,7 @@ logging.basicConfig(
     encoding="utf-8",
     format="%(asctime)s:%(levelname)s:%(name)s: %(message)s",
 )
+logger = logging.getLogger(__name__)
 
 # Configuration des intents - Optimisé pour réduire la charge WebSocket
 intents = discord.Intents.default()
@@ -243,7 +244,26 @@ class ISROBOT(commands.Bot):
                             if not discord_channel or not isinstance(
                                 discord_channel, discord.TextChannel
                             ):
+                                logger.warning(
+                                    f"Canal Discord introuvable ou invalide pour {channel_name}: {discord_channel_id}"
+                                )
                                 continue
+
+                            # Vérifier les permissions du bot dans le canal Discord
+                            if discord_channel.guild and discord_channel.guild.me:
+                                permissions = discord_channel.permissions_for(
+                                    discord_channel.guild.me
+                                )
+                                if not permissions.send_messages:
+                                    logger.warning(
+                                        f"Permission manquante pour envoyer des messages dans {discord_channel.name} (ID: {discord_channel_id}) pour la chaîne YouTube {channel_name}"
+                                    )
+                                    continue
+                                if not permissions.embed_links:
+                                    logger.warning(
+                                        f"Permission manquante pour envoyer des embeds dans {discord_channel.name} (ID: {discord_channel_id}) pour la chaîne YouTube {channel_name}"
+                                    )
+                                    continue
 
                             announcer = announceYouTube(self)
 
@@ -294,8 +314,18 @@ class ISROBOT(commands.Bot):
                                             )
                                             conn.commit()
                                             conn.close()
+                                except discord.errors.Forbidden as e:
+
+                                    logger.error(
+
+                                        f"Permission Discord refusée pour {channel_name} lors de l\'annonce du live: {e}"
+
+                                    )
+
                                 except Exception as e:
-                                    print(
+
+                                    logger.error(
+
                                         f"Erreur lors de la vérification du live pour {channel_name}: {e}"
                                     )
 
@@ -307,6 +337,10 @@ class ISROBOT(commands.Bot):
                                             channel_id, max_results=3
                                         )
                                     )
+
+                                    if not latest_uploads:
+                                        # Si la liste est vide, continuer sans erreur (le canal peut ne pas avoir de vidéos)
+                                        continue
 
                                     for upload in latest_uploads:
                                         video_id = upload["snippet"]["resourceId"][
@@ -382,18 +416,34 @@ class ISROBOT(commands.Bot):
                                                 conn.close()
                                                 break  # Ne traiter qu'une seule nouvelle vidéo à la fois
 
+                                except discord.errors.Forbidden as e:
+
+
+                                    logger.error(
+
+
+                                        f"Permission Discord refusée pour {channel_name} lors de l\'annonce d\'une vidéo/short: {e}"
+
+
+                                    )
+
+
                                 except Exception as e:
-                                    print(
+
+
+                                    logger.error(
+
+
                                         f"Erreur lors de la vérification des uploads pour {channel_name}: {e}"
                                     )
 
                         except Exception as e:
-                            print(
+                            logger.error(
                                 f"Erreur lors de la vérification de la chaîne {channel_data[2]}: {e}"
                             )
 
             except Exception as e:
-                print(f"Erreur lors de la vérification YouTube: {e}")
+                logger.error(f"Erreur lors de la vérification YouTube: {e}")
 
             # Attendre 5 minutes avant la prochaine vérification
             await asyncio.sleep(300)

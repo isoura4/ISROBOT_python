@@ -1,3 +1,4 @@
+import logging
 import os
 import sqlite3
 from typing import Optional
@@ -14,6 +15,9 @@ load_dotenv()
 # Récupération des variables d'environnement
 SERVER_ID = int(os.getenv("server_id", "0"))
 YOUTUBE_API_KEY = os.getenv("youtube_api_key")
+
+# Logger pour ce module
+logger = logging.getLogger(__name__)
 
 
 class YouTube(commands.Cog):
@@ -304,12 +308,34 @@ class checkYouTubeChannel:
         params = {"part": "contentDetails", "id": channel_id, "key": self.api_key}
 
         async with self.session.get(url, params=params) as response:
+            if response.status == 404:
+                # Le canal n'existe pas ou n'est pas accessible
+                logger.warning(f"Canal YouTube introuvable (404): {channel_id}")
+                return []
             if response.status != 200:
-                raise Exception(
-                    f"Erreur lors de la récupération de l'ID de playlist: {response.status}"
+                try:
+                    error_data = (
+                        await response.json()
+                        if response.content_type == "application/json"
+                        else {}
+                    )
+                except (aiohttp.ContentTypeError, ValueError):
+                    error_data = {}
+                error_msg = error_data.get("error", {}).get(
+                    "message", f"Status {response.status}"
                 )
-            data = await response.json()
+                raise Exception(
+                    f"Erreur lors de la récupération de l'ID de playlist: {error_msg}"
+                )
+            try:
+                data = await response.json()
+            except Exception as e:
+                logger.error(
+                    f"Erreur lors du parsing JSON pour le canal {channel_id}: {e}"
+                )
+                return []
             if "items" not in data or len(data["items"]) == 0:
+                logger.info(f"Aucune donnée de canal trouvée pour: {channel_id}")
                 return []
             uploads_playlist_id = data["items"][0]["contentDetails"][
                 "relatedPlaylists"
@@ -325,11 +351,34 @@ class checkYouTubeChannel:
         }
 
         async with self.session.get(url, params=params) as response:
-            if response.status != 200:
-                raise Exception(
-                    f"Erreur lors de la récupération des vidéos: {response.status}"
+            if response.status == 404:
+                # La playlist n'existe pas ou est vide
+                logger.warning(
+                    f"Playlist d'uploads introuvable (404) pour le canal: {channel_id}"
                 )
-            data = await response.json()
+                return []
+            if response.status != 200:
+                try:
+                    error_data = (
+                        await response.json()
+                        if response.content_type == "application/json"
+                        else {}
+                    )
+                except (aiohttp.ContentTypeError, ValueError):
+                    error_data = {}
+                error_msg = error_data.get("error", {}).get(
+                    "message", f"Status {response.status}"
+                )
+                raise Exception(
+                    f"Erreur lors de la récupération des vidéos: {error_msg}"
+                )
+            try:
+                data = await response.json()
+            except Exception as e:
+                logger.error(
+                    f"Erreur lors du parsing JSON de la playlist {uploads_playlist_id}: {e}"
+                )
+                return []
             return data.get("items", [])
 
     async def get_video_details(self, video_id: str):
@@ -345,11 +394,31 @@ class checkYouTubeChannel:
         }
 
         async with self.session.get(url, params=params) as response:
+            if response.status == 404:
+                logger.warning(f"Vidéo YouTube introuvable (404): {video_id}")
+                return None
             if response.status != 200:
-                raise Exception(
-                    f"Erreur lors de la récupération des détails de la vidéo: {response.status}"
+                try:
+                    error_data = (
+                        await response.json()
+                        if response.content_type == "application/json"
+                        else {}
+                    )
+                except (aiohttp.ContentTypeError, ValueError):
+                    error_data = {}
+                error_msg = error_data.get("error", {}).get(
+                    "message", f"Status {response.status}"
                 )
-            data = await response.json()
+                raise Exception(
+                    f"Erreur lors de la récupération des détails de la vidéo: {error_msg}"
+                )
+            try:
+                data = await response.json()
+            except Exception as e:
+                logger.error(
+                    f"Erreur lors du parsing JSON pour la vidéo {video_id}: {e}"
+                )
+                return None
             if "items" in data and len(data["items"]) > 0:
                 return data["items"][0]
             return None
@@ -369,11 +438,33 @@ class checkYouTubeChannel:
         }
 
         async with self.session.get(url, params=params) as response:
-            if response.status != 200:
-                raise Exception(
-                    f"Erreur lors de la vérification du statut live: {response.status}"
+            if response.status == 404:
+                logger.warning(
+                    f"Canal YouTube introuvable lors de la vérification du live (404): {channel_id}"
                 )
-            data = await response.json()
+                return []
+            if response.status != 200:
+                try:
+                    error_data = (
+                        await response.json()
+                        if response.content_type == "application/json"
+                        else {}
+                    )
+                except (aiohttp.ContentTypeError, ValueError):
+                    error_data = {}
+                error_msg = error_data.get("error", {}).get(
+                    "message", f"Status {response.status}"
+                )
+                raise Exception(
+                    f"Erreur lors de la vérification du statut live: {error_msg}"
+                )
+            try:
+                data = await response.json()
+            except Exception as e:
+                logger.error(
+                    f"Erreur lors du parsing JSON pour le statut live du canal {channel_id}: {e}"
+                )
+                return []
             return data.get("items", [])
 
 
@@ -433,10 +524,14 @@ class announceYouTube:
         if thumbnail_url:
             embed.set_image(url=thumbnail_url)
 
-        if discord_role is not None:
-            await discord_channel.send(content=discord_role.mention, embed=embed)
-        else:
-            await discord_channel.send(embed=embed)
+        try:
+            if discord_role is not None:
+                await discord_channel.send(content=discord_role.mention, embed=embed)
+            else:
+                await discord_channel.send(embed=embed)
+        except discord.errors.Forbidden as e:
+            # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
+            raise
 
     async def announce_short(
         self,
@@ -460,10 +555,14 @@ class announceYouTube:
         if thumbnail_url:
             embed.set_image(url=thumbnail_url)
 
-        if discord_role is not None:
-            await discord_channel.send(content=discord_role.mention, embed=embed)
-        else:
-            await discord_channel.send(embed=embed)
+        try:
+            if discord_role is not None:
+                await discord_channel.send(content=discord_role.mention, embed=embed)
+            else:
+                await discord_channel.send(embed=embed)
+        except discord.errors.Forbidden as e:
+            # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
+            raise
 
     async def announce_live(
         self,
@@ -487,10 +586,15 @@ class announceYouTube:
         if thumbnail_url:
             embed.set_image(url=thumbnail_url)
 
-        if discord_role is not None:
-            await discord_channel.send(content=discord_role.mention, embed=embed)
-        else:
-            await discord_channel.send(embed=embed)
+        try:
+            if discord_role is not None:
+                await discord_channel.send(content=discord_role.mention, embed=embed)
+            else:
+                await discord_channel.send(embed=embed)
+        except discord.errors.Forbidden as e:
+            # Propager l'erreur pour qu'elle soit capturée au niveau supérieur
+            raise
+
 
 
 async def setup(bot: commands.Bot):
