@@ -16,7 +16,6 @@ SERVER_ID = int(os.getenv("server_id", "0"))
 DB_PATH = os.getenv("db_path")
 
 # Configuration du système d'XP
-XP_PER_MESSAGE = random.randint(15, 25)  # XP aléatoire par message
 LEVEL_MULTIPLIER = 125  # Multiplicateur pour calculer l'XP nécessaire par niveau
 
 
