@@ -143,6 +143,7 @@ class ISROBOT(commands.Bot):
                     finally:
                         conn.close()
 
+                    print(f"🔍 [Twitch] Vérification de {len(streamers)} streamer(s)...")
                     logger.debug(
                         f"Vérification de {len(streamers)} streamer(s) Twitch"
                     )
@@ -157,7 +158,16 @@ class ISROBOT(commands.Bot):
                             streamer_name = streamer[1]
                             stream_channel_id = streamer[2]
                             announced = streamer[4]
-                            
+
+                            print(
+                                f"  → Vérification du streamer Twitch: "
+                                f"{streamer_name}"
+                            )
+                            logger.debug(
+                                f"Vérification du statut de {streamer_name} "
+                                f"sur Twitch"
+                            )
+
                             # Vérifier si le streamer est en ligne
                             stream_data = await stream_checker.check_streamer_status(
                                 streamer_name
@@ -165,6 +175,10 @@ class ISROBOT(commands.Bot):
                             if (
                                 stream_data and len(stream_data) > 0
                             ):  # Si des données sont retournées, le streamer est en ligne
+                                print(f"    ✓ {streamer_name} est en ligne !")
+                                logger.debug(
+                                    f"{streamer_name} est actuellement en ligne"
+                                )
                                 # Vérifier si on a déjà annoncé ce stream
                                 if announced == 0:
                                     channel = self.get_channel(
@@ -202,7 +216,19 @@ class ISROBOT(commands.Bot):
                                             )
                                         finally:
                                             conn.close()
+                                else:
+                                    print(
+                                        f"    ℹ {streamer_name} est déjà annoncé"
+                                    )
+                                    logger.debug(
+                                        f"{streamer_name} est en ligne mais "
+                                        f"déjà annoncé"
+                                    )
                             else:
+                                print(f"    ✗ {streamer_name} est hors ligne")
+                                logger.debug(
+                                    f"{streamer_name} n'est pas en ligne"
+                                )
                                 # Le streamer n'est pas en ligne, réinitialiser le statut d'annonce
                                 if announced == 1:  # Si était annoncé
                                     conn = database.get_db_connection()
@@ -254,6 +280,7 @@ class ISROBOT(commands.Bot):
                     finally:
                         conn.close()
 
+                    print(f"🔍 [YouTube] Vérification de {len(channels)} chaîne(s)...")
                     logger.debug(
                         f"Vérification de {len(channels)} chaîne(s) YouTube"
                     )
@@ -271,6 +298,15 @@ class ISROBOT(commands.Bot):
                             notify_videos = channel_data[8]  # notifyVideos
                             notify_shorts = channel_data[9]  # notifyShorts
                             notify_live = channel_data[10]  # notifyLive
+
+                            print(
+                                f"  → Vérification de la chaîne YouTube: "
+                                f"{channel_name}"
+                            )
+                            logger.debug(
+                                f"Vérification de {channel_name} "
+                                f"(ID: {channel_id})"
+                            )
 
                             discord_channel = self.get_channel(discord_channel_id)
                             if not discord_channel or not isinstance(
@@ -301,6 +337,14 @@ class ISROBOT(commands.Bot):
 
                             # Vérifier les lives
                             if notify_live:
+                                print(
+                                    f"    → Vérification des lives pour "
+                                    f"{channel_name}"
+                                )
+                                logger.debug(
+                                    f"Vérification du statut live pour "
+                                    f"{channel_name}"
+                                )
                                 try:
                                     live_videos = (
                                         await youtube_checker.check_live_status(
@@ -310,6 +354,15 @@ class ISROBOT(commands.Bot):
                                     if live_videos and len(live_videos) > 0:
                                         latest_live = live_videos[0]
                                         live_id = latest_live["id"]["videoId"]
+
+                                        print(
+                                            f"      ✓ Live détecté: "
+                                            f"{latest_live['snippet']['title']}"
+                                        )
+                                        logger.debug(
+                                            f"Live détecté pour {channel_name}: "
+                                            f"{live_id}"
+                                        )
 
                                         # Si c'est un nouveau live
                                         if live_id != last_live_id:
@@ -341,6 +394,14 @@ class ISROBOT(commands.Bot):
                                             finally:
                                                 conn.close()
                                     else:
+                                        print(
+                                            f"      ✗ Pas de live en cours pour "
+                                            f"{channel_name}"
+                                        )
+                                        logger.debug(
+                                            f"Aucun live en cours pour "
+                                            f"{channel_name}"
+                                        )
                                         # Pas de live en cours, réinitialiser lastLiveId
                                         if last_live_id:
                                             conn = database.get_db_connection()
@@ -368,6 +429,15 @@ class ISROBOT(commands.Bot):
 
                             # Vérifier les nouvelles vidéos et shorts
                             if notify_videos or notify_shorts:
+                                print(
+                                    f"    → Vérification des vidéos/shorts "
+                                    f"pour {channel_name}"
+                                )
+                                logger.debug(
+                                    f"Vérification des uploads pour "
+                                    f"{channel_name} (vidéos: {notify_videos}, "
+                                    f"shorts: {notify_shorts})"
+                                )
                                 try:
                                     latest_uploads = (
                                         await youtube_checker.get_latest_uploads(
@@ -402,6 +472,14 @@ class ISROBOT(commands.Bot):
                                         # Annoncer les shorts
                                         if is_short_video and notify_shorts:
                                             if video_id != last_short_id:
+                                                print(
+                                                    f"      ✓ Nouveau short "
+                                                    f"détecté: {video_title}"
+                                                )
+                                                logger.debug(
+                                                    f"Nouveau short détecté pour "
+                                                    f"{channel_name}: {video_id}"
+                                                )
                                                 await announcer.announce_short(
                                                     channel_id,
                                                     channel_name,
@@ -430,6 +508,14 @@ class ISROBOT(commands.Bot):
                                         # Annoncer les vidéos normales
                                         elif not is_short_video and notify_videos:
                                             if video_id != last_video_id:
+                                                print(
+                                                    f"      ✓ Nouvelle vidéo "
+                                                    f"détectée: {video_title}"
+                                                )
+                                                logger.debug(
+                                                    f"Nouvelle vidéo détectée pour "
+                                                    f"{channel_name}: {video_id}"
+                                                )
                                                 await announcer.announce_video(
                                                     channel_id,
                                                     channel_name,
