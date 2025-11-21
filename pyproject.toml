@@ -1,7 +1,7 @@
 [tool.black]
 line-length = 88
 target-version = ['py38']
-include = '\.pyi?$'
+include = '\.py$'
 extend-exclude = '''
 /(
   # directories

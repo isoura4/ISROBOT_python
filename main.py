@@ -1,4 +1,4 @@
-# Importation des librairy et modules
+# Importation des bibliothèques et modules
 import asyncio
 import logging
 import os
