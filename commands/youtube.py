@@ -3,6 +3,7 @@ import discord
 import sqlite3
 import asyncio
 import aiohttp
+import logging
 from typing import Optional
 from dotenv import load_dotenv
 from discord import app_commands
@@ -14,6 +15,9 @@ load_dotenv()
 # Récupération des variables d'environnement
 SERVER_ID = int(os.getenv('server_id', '0'))
 YOUTUBE_API_KEY = os.getenv('youtube_api_key')
+
+# Logger pour ce module
+logger = logging.getLogger(__name__)
 
 class YouTube(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -277,7 +281,7 @@ class checkYouTubeChannel:
         async with self.session.get(url, params=params) as response:
             if response.status == 404:
                 # Le canal n'existe pas ou n'est pas accessible
-                print(f"Canal YouTube introuvable (404): {channel_id}")
+                logger.warning(f"Canal YouTube introuvable (404): {channel_id}")
                 return []
             if response.status != 200:
                 error_data = await response.json() if response.content_type == 'application/json' else {}
@@ -285,7 +289,7 @@ class checkYouTubeChannel:
                 raise Exception(f"Erreur lors de la récupération de l'ID de playlist: {error_msg}")
             data = await response.json()
             if 'items' not in data or len(data['items']) == 0:
-                print(f"Aucune donnée de canal trouvée pour: {channel_id}")
+                logger.info(f"Aucune donnée de canal trouvée pour: {channel_id}")
                 return []
             uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
         
@@ -301,7 +305,7 @@ class checkYouTubeChannel:
         async with self.session.get(url, params=params) as response:
             if response.status == 404:
                 # La playlist n'existe pas ou est vide
-                print(f"Playlist d'uploads introuvable (404) pour le canal: {channel_id}")
+                logger.warning(f"Playlist d'uploads introuvable (404) pour le canal: {channel_id}")
                 return []
             if response.status != 200:
                 error_data = await response.json() if response.content_type == 'application/json' else {}
@@ -324,7 +328,7 @@ class checkYouTubeChannel:
         
         async with self.session.get(url, params=params) as response:
             if response.status == 404:
-                print(f"Vidéo YouTube introuvable (404): {video_id}")
+                logger.warning(f"Vidéo YouTube introuvable (404): {video_id}")
                 return None
             if response.status != 200:
                 error_data = await response.json() if response.content_type == 'application/json' else {}
@@ -351,7 +355,7 @@ class checkYouTubeChannel:
         
         async with self.session.get(url, params=params) as response:
             if response.status == 404:
-                print(f"Canal YouTube introuvable lors de la vérification du live (404): {channel_id}")
+                logger.warning(f"Canal YouTube introuvable lors de la vérification du live (404): {channel_id}")
                 return []
             if response.status != 200:
                 error_data = await response.json() if response.content_type == 'application/json' else {}
