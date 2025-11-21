@@ -49,6 +49,8 @@ class YouTube(commands.Cog):
             return
 
         # Vérifier si le channel_id est valide ou si c'est un handle
+        actual_channel_id = None
+        channel_name = None
         try:
             async with aiohttp.ClientSession() as session:
                 checker = CheckYouTubeChannel(session)
@@ -77,27 +79,68 @@ class YouTube(commands.Cog):
                         )
                         return
                     channel_name = channel_info.get("title", channel_id)
+
+                # Vérifier si la chaîne existe déjà dans la base de données
+                conn = database.get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT * FROM youtube_channels WHERE channelId = ? AND discordChannelId = ?",
+                    (actual_channel_id, str(channel.id)),
+                )
+                result = cursor.fetchone()
+                conn.close()
+
+                if result:
+                    await interaction.response.send_message(
+                        f"La chaîne YouTube {channel_name} est déjà dans la liste."
+                    )
+                    return
+
+                # Initialiser les IDs de suivi pour éviter d'annoncer l'ancien contenu
+                last_video_id = None
+                last_short_id = None
+                last_live_id = None
+
+                # Récupérer les dernières vidéos pour initialiser les IDs de suivi
+                latest_uploads = await checker.get_latest_uploads(
+                    actual_channel_id, max_results=5
+                )
+
+                # Parcourir les uploads récents pour trouver la dernière vidéo et le dernier short
+                for upload in latest_uploads:
+                    video_id = upload["snippet"]["resourceId"]["videoId"]
+                    video_details = await checker.get_video_details(video_id)
+
+                    if video_details:
+                        duration = video_details["contentDetails"]["duration"]
+                        is_short_video = is_short(duration)
+
+                        # Enregistrer le dernier short trouvé
+                        if is_short_video and last_short_id is None:
+                            last_short_id = video_id
+
+                        # Enregistrer la dernière vidéo normale trouvée
+                        if not is_short_video and last_video_id is None:
+                            last_video_id = video_id
+
+                        # Si on a trouvé les deux, on peut arrêter
+                        if last_video_id and last_short_id:
+                            break
+
+                # Vérifier s'il y a un live en cours
+                if notify_live:
+                    live_videos = await checker.check_live_status(actual_channel_id)
+                    if live_videos and len(live_videos) > 0:
+                        last_live_id = live_videos[0]["id"]["videoId"]
+
         except Exception as e:
             error_message = str(e)
             await interaction.response.send_message(
                 f"❌ Erreur lors de la vérification de la chaîne: {error_message}\n"
                 f"Assurez-vous que la clé API YouTube est correctement configurée et valide."
             )
-            return
-
-        # Vérifier si la chaîne existe déjà dans la base de données
-        conn = database.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT * FROM youtube_channels WHERE channelId = ? AND discordChannelId = ?",
-            (actual_channel_id, str(channel.id)),
-        )
-        result = cursor.fetchone()
-        conn.close()
-
-        if result:
-            await interaction.response.send_message(
-                f"La chaîne YouTube {channel_name} est déjà dans la liste."
+            logger.warning(
+                f"Impossible d'initialiser les IDs de suivi pour {channel_name if channel_name else channel_id}: {e}"
             )
             return
 
@@ -106,8 +149,10 @@ class YouTube(commands.Cog):
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO youtube_channels
-                         (channelId, channelName, discordChannelId, roleId, notifyVideos, notifyShorts, notifyLive)
-                         VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               (channelId, channelName, discordChannelId, roleId, 
+                notifyVideos, notifyShorts, notifyLive, 
+                lastVideoId, lastShortId, lastLiveId)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 actual_channel_id,
                 channel_name,
@@ -116,6 +161,9 @@ class YouTube(commands.Cog):
                 1 if notify_videos else 0,
                 1 if notify_shorts else 0,
                 1 if notify_live else 0,
+                last_video_id,
+                last_short_id,
+                last_live_id,
             ),
         )
         conn.commit()
@@ -133,8 +181,40 @@ class YouTube(commands.Cog):
         notif_text = (
             ", ".join(notifications) if notifications else "aucune notification"
         )
+
+        # Avertir si aucune notification n'est activée
+        if not notifications:
+            await interaction.response.send_message(
+                f"⚠️ Chaîne YouTube ajoutée : **{channel_name}** dans le salon "
+                f"{channel.mention}.\n"
+                f"📢 Notifications: {notif_text}\n"
+                f"⚠️ **Attention**: Aucune notification n'est activée. Le bot ne "
+                f"surveillera pas cette chaîne.\n"
+                f"Utilisez `/youtube_add` à nouveau avec au moins un type de "
+                f"notification activé."
+            )
+            return
+
+        # Préparer le message de confirmation avec les infos de suivi
+        tracking_info = []
+        if last_video_id:
+            tracking_info.append(f"Dernière vidéo: {last_video_id[:8]}...")
+        if last_short_id:
+            tracking_info.append(f"Dernier short: {last_short_id[:8]}...")
+        if last_live_id:
+            tracking_info.append(f"Live en cours: {last_live_id[:8]}...")
+
+        tracking_text = (
+            "\nSuivi initialisé: " + ", ".join(tracking_info)
+            if tracking_info
+            else "\nSuivi initialisé: Aucun contenu récent trouvé"
+        )
+
         await interaction.response.send_message(
-            f"Chaîne YouTube ajoutée : **{channel_name}** dans le salon {channel.mention}.\nNotifications: {notif_text}"
+            f"✅ Chaîne YouTube ajoutée : **{channel_name}** dans le salon {channel.mention}.\n"
+            f"📢 Notifications: {notif_text}"
+            f"{tracking_text}\n"
+            f"ℹ️ Seul le nouveau contenu publié après maintenant sera annoncé."
         )
         if ping_role is not None:
             await interaction.followup.send(
