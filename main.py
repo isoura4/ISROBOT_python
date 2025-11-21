@@ -217,6 +217,9 @@ class ISROBOT(commands.Bot):
                                         finally:
                                             conn.close()
                                 else:
+                                    print(
+                                        f"    ℹ {streamer_name} est déjà annoncé"
+                                    )
                                     logger.debug(
                                         f"{streamer_name} est en ligne mais "
                                         f"déjà annoncé"
