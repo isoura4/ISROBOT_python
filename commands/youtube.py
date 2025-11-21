@@ -284,7 +284,10 @@ class checkYouTubeChannel:
                 logger.warning(f"Canal YouTube introuvable (404): {channel_id}")
                 return []
             if response.status != 200:
-                error_data = await response.json() if response.content_type == 'application/json' else {}
+                try:
+                    error_data = await response.json() if response.content_type == 'application/json' else {}
+                except:
+                    error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la récupération de l'ID de playlist: {error_msg}")
             data = await response.json()
@@ -308,7 +311,10 @@ class checkYouTubeChannel:
                 logger.warning(f"Playlist d'uploads introuvable (404) pour le canal: {channel_id}")
                 return []
             if response.status != 200:
-                error_data = await response.json() if response.content_type == 'application/json' else {}
+                try:
+                    error_data = await response.json() if response.content_type == 'application/json' else {}
+                except:
+                    error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la récupération des vidéos: {error_msg}")
             data = await response.json()
@@ -331,7 +337,10 @@ class checkYouTubeChannel:
                 logger.warning(f"Vidéo YouTube introuvable (404): {video_id}")
                 return None
             if response.status != 200:
-                error_data = await response.json() if response.content_type == 'application/json' else {}
+                try:
+                    error_data = await response.json() if response.content_type == 'application/json' else {}
+                except:
+                    error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la récupération des détails de la vidéo: {error_msg}")
             data = await response.json()
@@ -358,7 +367,10 @@ class checkYouTubeChannel:
                 logger.warning(f"Canal YouTube introuvable lors de la vérification du live (404): {channel_id}")
                 return []
             if response.status != 200:
-                error_data = await response.json() if response.content_type == 'application/json' else {}
+                try:
+                    error_data = await response.json() if response.content_type == 'application/json' else {}
+                except:
+                    error_data = {}
                 error_msg = error_data.get('error', {}).get('message', f"Status {response.status}")
                 raise Exception(f"Erreur lors de la vérification du statut live: {error_msg}")
             data = await response.json()
