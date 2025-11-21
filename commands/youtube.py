@@ -49,6 +49,8 @@ class YouTube(commands.Cog):
             return
 
         # Vérifier si le channel_id est valide ou si c'est un handle
+        actual_channel_id = None
+        channel_name = None
         try:
             async with aiohttp.ClientSession() as session:
                 checker = CheckYouTubeChannel(session)
@@ -77,38 +79,27 @@ class YouTube(commands.Cog):
                         )
                         return
                     channel_name = channel_info.get("title", channel_id)
-        except Exception as e:
-            error_message = str(e)
-            await interaction.response.send_message(
-                f"❌ Erreur lors de la vérification de la chaîne: {error_message}\n"
-                f"Assurez-vous que la clé API YouTube est correctement configurée et valide."
-            )
-            return
 
-        # Vérifier si la chaîne existe déjà dans la base de données
-        conn = database.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT * FROM youtube_channels WHERE channelId = ? AND discordChannelId = ?",
-            (actual_channel_id, str(channel.id)),
-        )
-        result = cursor.fetchone()
-        conn.close()
+                # Vérifier si la chaîne existe déjà dans la base de données
+                conn = database.get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT * FROM youtube_channels WHERE channelId = ? AND discordChannelId = ?",
+                    (actual_channel_id, str(channel.id)),
+                )
+                result = cursor.fetchone()
+                conn.close()
 
-        if result:
-            await interaction.response.send_message(
-                f"La chaîne YouTube {channel_name} est déjà dans la liste."
-            )
-            return
+                if result:
+                    await interaction.response.send_message(
+                        f"La chaîne YouTube {channel_name} est déjà dans la liste."
+                    )
+                    return
 
-        # Initialiser les IDs de suivi pour éviter d'annoncer l'ancien contenu
-        last_video_id = None
-        last_short_id = None
-        last_live_id = None
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                checker = CheckYouTubeChannel(session)
+                # Initialiser les IDs de suivi pour éviter d'annoncer l'ancien contenu
+                last_video_id = None
+                last_short_id = None
+                last_live_id = None
 
                 # Récupérer les dernières vidéos pour initialiser les IDs de suivi
                 latest_uploads = await checker.get_latest_uploads(
@@ -143,18 +134,25 @@ class YouTube(commands.Cog):
                         last_live_id = live_videos[0]["id"]["videoId"]
 
         except Exception as e:
-            logger.warning(
-                f"Impossible d'initialiser les IDs de suivi pour {channel_name}: {e}"
+            error_message = str(e)
+            await interaction.response.send_message(
+                f"❌ Erreur lors de la vérification de la chaîne: {error_message}\n"
+                f"Assurez-vous que la clé API YouTube est correctement configurée et valide."
             )
-            # Continue quand même, les IDs seront NULL
+            logger.warning(
+                f"Impossible d'initialiser les IDs de suivi pour {channel_name if channel_name else channel_id}: {e}"
+            )
+            return
 
         # Ajouter la chaîne à la base de données
         conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO youtube_channels
-                         (channelId, channelName, discordChannelId, roleId, notifyVideos, notifyShorts, notifyLive, lastVideoId, lastShortId, lastLiveId)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (channelId, channelName, discordChannelId, roleId, 
+                notifyVideos, notifyShorts, notifyLive, 
+                lastVideoId, lastShortId, lastLiveId)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 actual_channel_id,
                 channel_name,
