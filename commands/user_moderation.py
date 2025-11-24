@@ -23,7 +23,6 @@ SERVER_ID = int(os.getenv("server_id", "0"))
 class UserModeration(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.appeal_cooldowns = {}  # Track appeal cooldowns
 
     @app_commands.command(
         name="appeal",
@@ -56,21 +55,17 @@ class UserModeration(commands.Cog):
                 )
                 return
 
-            # Check cooldown (48 hours)
-            cooldown_key = f"{guild_id}:{user_id}"
-            if cooldown_key in self.appeal_cooldowns:
-                last_appeal = self.appeal_cooldowns[cooldown_key]
-                time_since = datetime.now(timezone.utc) - last_appeal
-                if time_since < timedelta(hours=48):
-                    remaining = timedelta(hours=48) - time_since
-                    hours = int(remaining.total_seconds() // 3600)
-                    minutes = int((remaining.total_seconds() % 3600) // 60)
-                    await interaction.followup.send(
-                        f"⏳ Vous devez attendre encore {hours}h {minutes}m "
-                        f"avant de soumettre un nouvel appel.",
-                        ephemeral=True
-                    )
-                    return
+            # Check cooldown (48 hours) - database-backed
+            remaining_cooldown = moderation_utils.check_appeal_cooldown(guild_id, user_id)
+            if remaining_cooldown:
+                hours = int(remaining_cooldown.total_seconds() // 3600)
+                minutes = int((remaining_cooldown.total_seconds() % 3600) // 60)
+                await interaction.followup.send(
+                    f"⏳ Vous devez attendre encore {hours}h {minutes}m "
+                    f"avant de soumettre un nouvel appel.",
+                    ephemeral=True
+                )
+                return
 
             # Create appeal
             appeal_id = moderation_utils.create_appeal(guild_id, user_id, reason)
@@ -81,9 +76,6 @@ class UserModeration(commands.Cog):
                     ephemeral=True
                 )
                 return
-
-            # Update cooldown
-            self.appeal_cooldowns[cooldown_key] = datetime.now(timezone.utc)
 
             # Send confirmation to user
             embed = discord.Embed(

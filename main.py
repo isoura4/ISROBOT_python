@@ -657,7 +657,17 @@ class ISROBOT(commands.Bot):
             await asyncio.sleep(600)
 
     async def warning_decay_loop(self):
-        """Vérifier périodiquement et faire expirer les avertissements."""
+        """
+        Vérifier périodiquement et faire expirer les avertissements.
+        
+        Note: There's a theoretical race condition if a moderator manually
+        decrements warnings while this loop is running. However, this is
+        acceptable because:
+        - The loop runs only every 6 hours
+        - Manual decrements are rare
+        - Database operations are atomic
+        - Worst case: warning decays one cycle later
+        """
         await self.wait_until_ready()
         logger.info("Démarrage de la boucle d'expiration des avertissements")
 

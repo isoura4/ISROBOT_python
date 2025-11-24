@@ -133,8 +133,18 @@ def decrement_warning(
         conn.close()
 
 
-def get_warning_history(guild_id: str, user_id: str) -> list:
-    """Get complete warning history for a user."""
+def get_warning_history(guild_id: str, user_id: str, limit: int = 100) -> list:
+    """
+    Get warning history for a user.
+    
+    Args:
+        guild_id: The guild ID
+        user_id: The user ID
+        limit: Maximum number of entries to return (default 100)
+    
+    Returns:
+        List of warning history entries, most recent first
+    """
     conn = database.get_db_connection()
     try:
         cursor = conn.cursor()
@@ -143,8 +153,9 @@ def get_warning_history(guild_id: str, user_id: str) -> list:
             SELECT * FROM warning_history 
             WHERE guild_id = ? AND user_id = ?
             ORDER BY created_at DESC
+            LIMIT ?
         """,
-            (guild_id, user_id),
+            (guild_id, user_id, limit),
         )
         return cursor.fetchall()
     finally:
@@ -293,6 +304,18 @@ def get_moderation_config(guild_id: str) -> Optional[dict]:
 
 def set_moderation_config(guild_id: str, parameter: str, value: str) -> None:
     """Set a moderation configuration parameter for a guild."""
+    # Allowlist of valid column names
+    valid_columns = {
+        "log_channel_id", "appeal_channel_id", "ai_enabled", 
+        "ai_confidence_threshold", "ai_flag_channel_id", "ai_model", 
+        "ollama_host", "decay_multiplier", "warn_1_decay_days", 
+        "warn_2_decay_days", "warn_3_decay_days", "mute_duration_warn_2", 
+        "mute_duration_warn_3", "rules_message_id"
+    }
+    
+    if parameter not in valid_columns:
+        raise ValueError(f"Invalid parameter: {parameter}")
+    
     conn = database.get_db_connection()
     try:
         cursor = conn.cursor()
@@ -311,11 +334,9 @@ def set_moderation_config(guild_id: str, parameter: str, value: str) -> None:
                 (guild_id, now),
             )
 
-        # Update the parameter
-        cursor.execute(
-            f"UPDATE moderation_config SET {parameter} = ? WHERE guild_id = ?",
-            (value, guild_id),
-        )
+        # Update the parameter using allowlisted column name
+        query = f"UPDATE moderation_config SET {parameter} = ? WHERE guild_id = ?"
+        cursor.execute(query, (value, guild_id))
 
         conn.commit()
     finally:
@@ -451,6 +472,40 @@ def get_pending_appeals(guild_id: str) -> list:
             (guild_id,),
         )
         return cursor.fetchall()
+    finally:
+        conn.close()
+
+
+def check_appeal_cooldown(guild_id: str, user_id: str) -> Optional[timedelta]:
+    """
+    Check if user is on appeal cooldown.
+    Returns remaining cooldown time if on cooldown, None otherwise.
+    """
+    conn = database.get_db_connection()
+    try:
+        cursor = conn.cursor()
+        # Get last appeal created time
+        cursor.execute(
+            """
+            SELECT created_at FROM moderation_appeals 
+            WHERE guild_id = ? AND user_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        """,
+            (guild_id, user_id),
+        )
+        result = cursor.fetchone()
+        
+        if not result:
+            return None
+        
+        last_appeal = datetime.fromisoformat(result["created_at"])
+        time_since = datetime.now(timezone.utc) - last_appeal
+        cooldown = timedelta(hours=48)
+        
+        if time_since < cooldown:
+            return cooldown - time_since
+        return None
     finally:
         conn.close()
 
