@@ -122,6 +122,161 @@ def create_database():
     """
     )
 
+    # --- MODERATION SYSTEM TABLES ---
+
+    # Table des avertissements (warnings)
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS warnings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            warn_count INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(guild_id, user_id)
+        )
+    """
+    )
+
+    # Index pour les recherches fréquentes
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_warnings_guild_user 
+        ON warnings(guild_id, user_id)
+    """
+    )
+
+    # Historique des avertissements (audit trail immuable)
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS warning_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            warn_count_before INTEGER NOT NULL,
+            warn_count_after INTEGER NOT NULL,
+            moderator_id TEXT,
+            reason TEXT,
+            created_at TEXT NOT NULL
+        )
+    """
+    )
+
+    # Index pour les recherches d'historique
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_history_guild_user 
+        ON warning_history(guild_id, user_id)
+    """
+    )
+
+    # Table des appels (appeals)
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS moderation_appeals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            warning_history_id INTEGER,
+            appeal_reason TEXT NOT NULL,
+            moderator_id TEXT,
+            status TEXT DEFAULT 'pending',
+            moderator_decision TEXT,
+            created_at TEXT NOT NULL,
+            reviewed_at TEXT,
+            FOREIGN KEY(warning_history_id) REFERENCES warning_history(id)
+        )
+    """
+    )
+
+    # Index pour les appels en attente
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_appeals_status 
+        ON moderation_appeals(guild_id, status)
+    """
+    )
+
+    # Configuration de modération par serveur
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS moderation_config (
+            guild_id TEXT PRIMARY KEY,
+            log_channel_id TEXT,
+            appeal_channel_id TEXT,
+            ai_enabled INTEGER DEFAULT 1,
+            ai_confidence_threshold INTEGER DEFAULT 60,
+            ai_flag_channel_id TEXT,
+            ai_model TEXT DEFAULT 'llama2',
+            ollama_host TEXT DEFAULT 'http://localhost:11434',
+            decay_multiplier REAL DEFAULT 1.0,
+            warn_1_decay_days INTEGER DEFAULT 7,
+            warn_2_decay_days INTEGER DEFAULT 14,
+            warn_3_decay_days INTEGER DEFAULT 21,
+            mute_duration_warn_2 INTEGER DEFAULT 3600,
+            mute_duration_warn_3 INTEGER DEFAULT 86400,
+            rules_message_id TEXT,
+            created_at TEXT NOT NULL
+        )
+    """
+    )
+
+    # Table des messages signalés par l'IA
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ai_flags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            message_content TEXT NOT NULL,
+            ai_score INTEGER NOT NULL,
+            ai_category TEXT NOT NULL,
+            ai_reason TEXT NOT NULL,
+            moderator_action TEXT DEFAULT 'pending',
+            moderator_id TEXT,
+            created_at TEXT NOT NULL,
+            reviewed_at TEXT,
+            UNIQUE(message_id)
+        )
+    """
+    )
+
+    # Index pour les flags en attente
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_ai_flags_status 
+        ON ai_flags(guild_id, moderator_action)
+    """
+    )
+
+    # Table des mutes actifs
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS active_mutes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            moderator_id TEXT,
+            reason TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(guild_id, user_id)
+        )
+    """
+    )
+
+    # Index pour les recherches d'expiration
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_mutes_expires 
+        ON active_mutes(expires_at)
+    """
+    )
+
     conn.commit()
     conn.close()
 
