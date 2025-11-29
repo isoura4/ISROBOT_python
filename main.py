@@ -49,6 +49,8 @@ class ISROBOT(commands.Bot):
         self.voice_xp_tasks = {}
         # Lock dictionary for counter game to prevent race conditions
         # Key: (guild_id, channel_id), Value: asyncio.Lock()
+        # Note: This grows with new channels but counter games are typically
+        # limited to one per guild, so memory impact is minimal
         self._counter_locks: dict[tuple[str, str], asyncio.Lock] = {}
 
     async def setup_hook(self):
@@ -658,9 +660,8 @@ class ISROBOT(commands.Bot):
     def _get_counter_lock(self, guild_id: str, channel_id: str) -> asyncio.Lock:
         """Get or create a lock for a specific counter game channel."""
         key = (guild_id, channel_id)
-        if key not in self._counter_locks:
-            self._counter_locks[key] = asyncio.Lock()
-        return self._counter_locks[key]
+        # Use setdefault for thread-safe lock creation
+        return self._counter_locks.setdefault(key, asyncio.Lock())
 
     async def reset_counter_game(
         self, message: discord.Message, cursor, conn, error_message: str
