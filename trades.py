@@ -8,6 +8,7 @@ This module handles:
 - XP transfer safety checks and caps
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -23,6 +24,8 @@ from db_helpers import (
     spend_coins,
     spend_xp,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # Default escrow duration in minutes
@@ -601,7 +604,7 @@ def check_and_complete_ready_trades(conn=None) -> list:
                 complete_trade(trade_row[0], conn)
                 completed.append(trade_row[0])
             except Exception as e:
-                print(f"Failed to complete trade {trade_row[0]}: {e}")
+                logger.error(f"Failed to complete trade {trade_row[0]}: {e}")
                 continue
 
         return completed
@@ -631,5 +634,9 @@ def get_xp_transfer_warning(
         "current_level": level_info["old_level"],
         "new_level": level_info["new_level"],
         "will_level_down": level_info["level_change"] < 0,
-        "levels_lost": abs(level_info["level_change"]) if level_info["level_change"] < 0 else 0,  # noqa: E501
+        "levels_lost": (
+            abs(level_info["level_change"])
+            if level_info["level_change"] < 0
+            else 0
+        ),
     }

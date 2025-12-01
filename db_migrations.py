@@ -7,12 +7,16 @@ This module provides migration scripts to:
 3. Add guild_settings table for per-guild configuration
 """
 
+import logging
 import os
 import shutil
 import sqlite3
 from datetime import datetime
 
 import dotenv
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 dotenv.load_dotenv()
@@ -49,7 +53,7 @@ def backup_database(db_path=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = f"{path}.{timestamp}.bak"
     shutil.copy2(path, backup_path)
-    print(f"Database backup created: {backup_path}")
+    logger.info(f"Database backup created: {backup_path}")
     return backup_path
 
 
@@ -70,7 +74,9 @@ def remove_corners_column(db_path=None):
         column_names = [col[1] for col in columns]
 
         if "corners" not in column_names:
-            print("Column 'corners' does not exist in users table. Skipping.")
+            logger.info(
+                "Column 'corners' does not exist in users table. Skipping."
+            )
             return True
 
         # Begin transaction
@@ -100,12 +106,12 @@ def remove_corners_column(db_path=None):
         cursor.execute("ALTER TABLE users_new RENAME TO users")
 
         conn.commit()
-        print("Successfully removed 'corners' column from users table.")
+        logger.info("Successfully removed 'corners' column from users table.")
         return True
 
     except Exception as e:
         conn.rollback()
-        print(f"Error removing corners column: {e}")
+        logger.error(f"Error removing corners column: {e}")
         return False
     finally:
         conn.close()
@@ -294,12 +300,12 @@ def create_minigame_tables(db_path=None):
         """)
 
         conn.commit()
-        print("Successfully created all minigame tables.")
+        logger.info("Successfully created all minigame tables.")
         return True
 
     except Exception as e:
         conn.rollback()
-        print(f"Error creating minigame tables: {e}")
+        logger.error(f"Error creating minigame tables: {e}")
         return False
     finally:
         conn.close()
@@ -427,7 +433,7 @@ def seed_default_quests(db_path=None):
         cursor.execute("SELECT COUNT(*) FROM quests")
         count = cursor.fetchone()[0]
         if count > 0:
-            print(f"Quests table already has {count} entries. Skipping seed.")
+            logger.info(f"Quests table already has {count} entries. Skipping seed.")
             return True
 
         cursor.executemany(
@@ -441,12 +447,12 @@ def seed_default_quests(db_path=None):
         )
 
         conn.commit()
-        print(f"Successfully seeded {len(default_quests)} default quests.")
+        logger.info(f"Successfully seeded {len(default_quests)} default quests.")
         return True
 
     except Exception as e:
         conn.rollback()
-        print(f"Error seeding default quests: {e}")
+        logger.error(f"Error seeding default quests: {e}")
         return False
     finally:
         conn.close()
@@ -518,7 +524,9 @@ def seed_default_shop_items(db_path=None):
         cursor.execute("SELECT COUNT(*) FROM shop_items")
         count = cursor.fetchone()[0]
         if count > 0:
-            print(f"Shop items table already has {count} entries. Skipping seed.")
+            logger.info(
+                f"Shop items table already has {count} entries. Skipping seed."
+            )
             return True
 
         cursor.executemany(
@@ -531,12 +539,12 @@ def seed_default_shop_items(db_path=None):
         )
 
         conn.commit()
-        print(f"Successfully seeded {len(default_items)} default shop items.")
+        logger.info(f"Successfully seeded {len(default_items)} default shop items.")
         return True
 
     except Exception as e:
         conn.rollback()
-        print(f"Error seeding default shop items: {e}")
+        logger.error(f"Error seeding default shop items: {e}")
         return False
     finally:
         conn.close()
@@ -544,21 +552,21 @@ def seed_default_shop_items(db_path=None):
 
 def run_all_migrations(db_path=None):
     """Run all migrations in order."""
-    print("Starting database migrations...")
+    logger.info("Starting database migrations...")
 
     # Create backup first
     backup = backup_database(db_path)
     if backup:
-        print(f"Backup created at: {backup}")
+        logger.info(f"Backup created at: {backup}")
 
     # Run migrations
     success = True
 
     if not remove_corners_column(db_path):
-        print("Warning: corners column removal failed or skipped")
+        logger.warning("corners column removal failed or skipped")
 
     if not create_minigame_tables(db_path):
-        print("Error: Failed to create minigame tables")
+        logger.error("Failed to create minigame tables")
         success = False
 
     if success:
@@ -567,12 +575,17 @@ def run_all_migrations(db_path=None):
         seed_default_shop_items(db_path)
 
     if success:
-        print("All migrations completed successfully!")
+        logger.info("All migrations completed successfully!")
     else:
-        print("Some migrations failed. Check logs above.")
+        logger.error("Some migrations failed. Check logs above.")
 
     return success
 
 
 if __name__ == "__main__":
+    # Configure basic logging when running as script
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     run_all_migrations()

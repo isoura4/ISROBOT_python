@@ -737,6 +737,21 @@ def update_daily_tracking(
     # Ensure record exists
     get_daily_tracking(guild_id, user_id, conn)
 
+    # Whitelist of allowed column names to prevent SQL injection
+    allowed_columns = {
+        "last_daily_claim",
+        "streak",
+        "daily_xp_transferred",
+        "last_xp_transfer_reset",
+        "last_capture_at",
+        "last_duel_at",
+    }
+
+    # Validate all column names
+    for key in updates.keys():
+        if key not in allowed_columns:
+            raise ValueError(f"Invalid column name: {key}")
+
     cursor = conn.cursor()
     try:
         set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])

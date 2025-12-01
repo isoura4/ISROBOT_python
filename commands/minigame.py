@@ -11,7 +11,9 @@ This module provides Discord bot commands for:
 - Capture and duel games
 """
 
+import logging
 import os
+from datetime import datetime
 from typing import Optional
 
 import discord
@@ -19,7 +21,6 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
-from datetime import datetime
 from db_helpers import (
     add_quest_exception_channel,
     get_guild_settings,
@@ -63,6 +64,9 @@ from trades import (
 # Load environment variables
 load_dotenv()
 SERVER_ID = int(os.getenv("server_id", "0"))
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Channel restriction error message
 CHANNEL_RESTRICTION_MSG = (
@@ -133,6 +137,9 @@ class MinigameCommands(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.trade_checker.start()
+        # Pending XP trade confirmations:
+        # {(guild_id, user_id): (to_user_id, coins, xp, timestamp)}
+        self._pending_xp_confirmations: dict = {}
 
     def cog_unload(self):
         self.trade_checker.cancel()
@@ -143,9 +150,9 @@ class MinigameCommands(commands.Cog):
         try:
             completed = check_and_complete_ready_trades()
             if completed:
-                print(f"Auto-completed {len(completed)} trade(s)")
+                logger.info(f"Auto-completed {len(completed)} trade(s)")
         except Exception as e:
-            print(f"Trade checker error: {e}")
+            logger.error(f"Trade checker error: {e}")
 
     @trade_checker.before_loop
     async def before_trade_checker(self):
@@ -793,26 +800,77 @@ class MinigameCommands(commands.Cog):
             warning = get_xp_transfer_warning(guild_id, from_user_id, xp)
 
             if warning["will_level_down"]:
-                # Require confirmation for level loss
-                embed = discord.Embed(
-                    title="⚠️ XP Transfer Warning",
-                    description=(
-                        f"**This trade will cause you to lose levels!**\n\n"
-                        f"Current XP: {warning['current_xp']}\n"
-                        f"XP to transfer: {xp}\n"
-                        f"Remaining XP: {warning['remaining_xp']}\n\n"
-                        f"**Level change:** {warning['current_level']} → "
-                        f"{warning['new_level']}\n"
-                        f"You will lose **{warning['levels_lost']}** level(s)!"
-                    ),
-                    color=discord.Color.orange(),
-                )
-                embed.set_footer(
-                    text="Confirm by running the command again within 30 seconds"
-                )
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-                # TODO: Add confirmation button/flow
-                return
+                confirm_key = (guild_id, from_user_id)
+                now = datetime.utcnow()
+
+                # Check if there's a pending confirmation
+                pending = self._pending_xp_confirmations.get(confirm_key)
+                if pending:
+                    p_to_user, p_coins, p_xp, p_time = pending
+                    # Check if same trade and within 30 seconds
+                    time_diff = (now - p_time).total_seconds()
+                    if (
+                        p_to_user == to_user_id
+                        and p_coins == coins
+                        and p_xp == xp
+                        and time_diff <= 30
+                    ):
+                        # Confirmation received, clear and proceed
+                        del self._pending_xp_confirmations[confirm_key]
+                        # Fall through to create the trade
+                    else:
+                        # Different trade or expired, update pending
+                        self._pending_xp_confirmations[confirm_key] = (
+                            to_user_id, coins, xp, now
+                        )
+                        embed = discord.Embed(
+                            title="⚠️ XP Transfer Warning",
+                            description=(
+                                f"**This trade will cause you to lose levels!**\n\n"
+                                f"Current XP: {warning['current_xp']}\n"
+                                f"XP to transfer: {xp}\n"
+                                f"Remaining XP: {warning['remaining_xp']}\n\n"
+                                f"**Level change:** {warning['current_level']} → "
+                                f"{warning['new_level']}\n"
+                                f"You will lose **{warning['levels_lost']}** "
+                                f"level(s)!"
+                            ),
+                            color=discord.Color.orange(),
+                        )
+                        embed.set_footer(
+                            text="Run the same command again within "
+                                 "30 seconds to confirm"
+                        )
+                        await interaction.response.send_message(
+                            embed=embed, ephemeral=True
+                        )
+                        return
+                else:
+                    # First attempt, store for confirmation
+                    self._pending_xp_confirmations[confirm_key] = (
+                        to_user_id, coins, xp, now
+                    )
+                    embed = discord.Embed(
+                        title="⚠️ XP Transfer Warning",
+                        description=(
+                            f"**This trade will cause you to lose levels!**\n\n"
+                            f"Current XP: {warning['current_xp']}\n"
+                            f"XP to transfer: {xp}\n"
+                            f"Remaining XP: {warning['remaining_xp']}\n\n"
+                            f"**Level change:** {warning['current_level']} → "
+                            f"{warning['new_level']}\n"
+                            f"You will lose **{warning['levels_lost']}** level(s)!"
+                        ),
+                        color=discord.Color.orange(),
+                    )
+                    embed.set_footer(
+                        text="Run the same command again within "
+                             "30 seconds to confirm"
+                    )
+                    await interaction.response.send_message(
+                        embed=embed, ephemeral=True
+                    )
+                    return
 
         try:
             result = create_trade_offer(
