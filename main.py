@@ -47,6 +47,11 @@ class ISROBOT(commands.Bot):
         super().__init__(command_prefix="µ", intents=intents, application_id=APP_ID)
         self.session = None
         self.voice_xp_tasks = {}
+        # Lock dictionary for counter game to prevent race conditions
+        # Key: (guild_id, channel_id), Value: asyncio.Lock()
+        # Note: This grows with new channels but counter games are typically
+        # limited to one per guild, so memory impact is minimal
+        self._counter_locks: dict[tuple[str, str], asyncio.Lock] = {}
 
     async def setup_hook(self):
         # Créer une session HTTP pour les requêtes API
@@ -910,67 +915,87 @@ class ISROBOT(commands.Bot):
         # Quand un message est envoyé dans le salon compteur du minijeux comparé avec le dernier chiffre
         from database import get_db_connection
 
+        guild_id = str(message.guild.id)
+        channel_id = str(message.channel.id)
+
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM counter_game WHERE guildId = ? AND channelId = ?",
-            (str(message.guild.id), str(message.channel.id)),
+            "SELECT 1 FROM counter_game WHERE guildId = ? AND channelId = ?",
+            (guild_id, channel_id),
         )
-        result = cursor.fetchone()
-        if result:
+        is_counter_channel = cursor.fetchone() is not None
+        conn.close()
+
+        if not is_counter_channel:
+            return
+
+        # Only check if it's a digit before acquiring the lock
+        if not (message.content.isdigit() and not str(message.content).isspace()):
+            return
+
+        # Acquire lock for this specific guild/channel to prevent race conditions
+        lock = self._get_counter_lock(guild_id, channel_id)
+        async with lock:
+            # Re-read the database state under the lock to get fresh values
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM counter_game WHERE guildId = ? AND channelId = ?",
+                (guild_id, channel_id),
+            )
+            result = cursor.fetchone()
+
+            if not result:
+                conn.close()
+                return
+
             # Si le message est envoyé dans le salon du minijeux compteur
             last_user_id = result["lastUserId"]
             last_count = result["count"]
             count = message.content
-            if (
-                message.content.isdigit() and not str(message.content).isspace()
-            ):  # Vérifie si le message est un chiffre
-                if str(message.author.id) == last_user_id:
-                    await self.reset_counter_game(
-                        message,
-                        cursor,
-                        conn,
-                        "Vous ne pouvez pas compter deux fois de suite !",
-                    )
-                    return
-                if str(int(message.content)) == str(result["count"] + 1):
-                    await message.add_reaction("✅")
-                    # Mettre à jour le compteur
-                    cursor.execute(
-                        "UPDATE counter_game SET count = ?, lastUserId = ? WHERE guildId = ? AND channelId = ?",
-                        (
-                            count,
-                            str(message.author.id),
-                            str(message.guild.id),
-                            str(message.channel.id),
-                        ),
-                    )
-                    conn.commit()
-                    conn.close()
-                    return
-                elif str(int(message.content)) == str(result["count"]):
-                    await self.reset_counter_game(
-                        message,
-                        cursor,
-                        conn,
-                        f"Vous avez mis le même chiffre ! Le bon chiffre était {last_count + 1}",
-                    )
-                    return
-                else:
-                    # Mauvais chiffre (ni count+1, ni count)
-                    await self.reset_counter_game(
-                        message,
-                        cursor,
-                        conn,
-                        f"Mauvais chiffre ! Le bon chiffre était {last_count + 1}, "
-                        f"mais vous avez mis {message.content}.",
-                    )
-                    return
-            else:
+
+            if str(message.author.id) == last_user_id:
+                await self.reset_counter_game(
+                    message,
+                    cursor,
+                    conn,
+                    "Vous ne pouvez pas compter deux fois de suite !",
+                )
+                return
+            if str(int(message.content)) == str(result["count"] + 1):
+                await message.add_reaction("✅")
+                # Mettre à jour le compteur
+                cursor.execute(
+                    "UPDATE counter_game SET count = ?, lastUserId = ? WHERE guildId = ? AND channelId = ?",
+                    (
+                        count,
+                        str(message.author.id),
+                        guild_id,
+                        channel_id,
+                    ),
+                )
+                conn.commit()
                 conn.close()
                 return
-        else:
-            conn.close()
+            elif str(int(message.content)) == str(result["count"]):
+                await self.reset_counter_game(
+                    message,
+                    cursor,
+                    conn,
+                    f"Vous avez mis le même chiffre ! Le bon chiffre était {last_count + 1}",
+                )
+                return
+            else:
+                # Mauvais chiffre (ni count+1, ni count)
+                await self.reset_counter_game(
+                    message,
+                    cursor,
+                    conn,
+                    f"Mauvais chiffre ! Le bon chiffre était {last_count + 1}, "
+                    f"mais vous avez mis {message.content}.",
+                )
+                return
 
     async def close(self):
         """Fermer proprement la session HTTP quand le bot se ferme."""
