@@ -127,6 +127,7 @@ def create_minigame_tables(db_path=None):
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS guild_settings (
                 guildId TEXT PRIMARY KEY,
+                minigame_enabled INTEGER DEFAULT 1,
                 minigame_channel_id TEXT,
                 xp_trading_enabled INTEGER DEFAULT 1,
                 trade_tax_percent REAL DEFAULT 10.0,

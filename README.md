@@ -148,6 +148,8 @@ ISROBOT_python/
 ### Minigame Commands
 All minigame commands must be run in the designated minigame channel (set by an admin).
 
+> **Note:** The minigame system can be enabled/disabled per-server with `/minigame enable` and `/minigame disable`, or globally via the `.env` file by setting `minigame_enabled=false`.
+
 #### Economy & Wallet
 - `/wallet` - View your coins, XP, and level
 - `/history [type]` - View recent transactions (filter by type: all, quests, shop, trades, captures, duels)
@@ -178,6 +180,8 @@ All minigame commands must be run in the designated minigame channel (set by an 
 
 ### Administrative Commands (Admin Only)
 - `/count <channel>` - Set up the counter mini-game in a specific channel
+- `/minigame enable` - Enable the minigame system for this server
+- `/minigame disable` - Disable the minigame system for this server
 - `/minigame set-channel <channel>` - Set the minigame channel for this server
 - `/minigame clear-channel` - Remove the minigame channel restriction
 - `/minigame allow-channel <channel>` - Add a quest exception channel

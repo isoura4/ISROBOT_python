@@ -458,6 +458,7 @@ def get_guild_settings(
 
         return {
             "guildId": str(guild_id),
+            "minigame_enabled": 1,
             "minigame_channel_id": None,
             "xp_trading_enabled": 1,
             "trade_tax_percent": 10.0,
@@ -470,6 +471,44 @@ def get_guild_settings(
     finally:
         if should_close:
             conn.close()
+
+
+def set_minigame_enabled(
+    guild_id: str,
+    enabled: bool,
+    conn: Optional[sqlite3.Connection] = None,
+) -> bool:
+    """Enable or disable the minigame system for a guild."""
+    should_close = conn is None
+    if conn is None:
+        conn = get_db_connection()
+
+    cursor = conn.cursor()
+    try:
+        # Ensure settings exist
+        get_guild_settings(guild_id, conn)
+
+        cursor.execute(
+            """
+            UPDATE guild_settings SET minigame_enabled = ?, updated_at = ?
+            WHERE guildId = ?
+            """,
+            (1 if enabled else 0, datetime.utcnow().isoformat(), str(guild_id)),
+        )
+        conn.commit()
+        return True
+    finally:
+        if should_close:
+            conn.close()
+
+
+def is_minigame_enabled(
+    guild_id: str,
+    conn: Optional[sqlite3.Connection] = None,
+) -> bool:
+    """Check if the minigame system is enabled for a guild."""
+    settings = get_guild_settings(guild_id, conn)
+    return bool(settings.get("minigame_enabled", 1))
 
 
 def set_minigame_channel(

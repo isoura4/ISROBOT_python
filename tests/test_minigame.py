@@ -30,8 +30,10 @@ from db_helpers import (  # noqa: E402
     get_guild_settings,
     get_user_balance,
     is_minigame_channel,
+    is_minigame_enabled,
     set_cooldown,
     set_minigame_channel,
+    set_minigame_enabled,
     spend_coins,
     spend_xp,
 )
@@ -305,6 +307,19 @@ class TestGuildSettings:
 
         settings = get_guild_settings("guild1")
         assert settings["minigame_channel_id"] is None
+
+    def test_enable_disable_minigame(self, mock_db_connection):
+        """Test enabling and disabling minigame system."""
+        # Default should be enabled
+        assert is_minigame_enabled("guild1") is True
+
+        # Disable
+        set_minigame_enabled("guild1", False)
+        assert is_minigame_enabled("guild1") is False
+
+        # Re-enable
+        set_minigame_enabled("guild1", True)
+        assert is_minigame_enabled("guild1") is True
 
 
 class TestQuests:

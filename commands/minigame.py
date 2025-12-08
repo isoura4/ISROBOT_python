@@ -27,9 +27,11 @@ from db_helpers import (
     get_quest_exception_channels,
     get_user_balance,
     get_user_transactions,
+    is_minigame_enabled,
     is_quest_exception_channel,
     remove_quest_exception_channel,
     set_minigame_channel,
+    set_minigame_enabled,
 )
 from minigame_engine import (
     arena_duel,
@@ -65,8 +67,23 @@ from trades import (
 load_dotenv()
 SERVER_ID = int(os.getenv("server_id", "0"))
 
+# Global minigame toggle from .env (default: enabled)
+MINIGAME_GLOBALLY_ENABLED = os.getenv("minigame_enabled", "true").lower() != "false"
+
 # Set up logging
 logger = logging.getLogger(__name__)
+
+# Error messages
+MINIGAME_DISABLED_GLOBAL_MSG = (
+    "⚠️ **Minigame System Disabled**\n\n"
+    "The minigame system has been globally disabled by the bot administrator."
+)
+
+MINIGAME_DISABLED_GUILD_MSG = (
+    "⚠️ **Minigame System Disabled**\n\n"
+    "The minigame system has been disabled for this server.\n"
+    "An administrator can enable it with `/minigame enable`."
+)
 
 # Channel restriction error message
 CHANNEL_RESTRICTION_MSG = (
@@ -93,6 +110,14 @@ async def check_minigame_channel(
 
     Returns True if allowed, False if not (sends error message).
     """
+    # Check global toggle from .env
+    if not MINIGAME_GLOBALLY_ENABLED:
+        await interaction.response.send_message(
+            MINIGAME_DISABLED_GLOBAL_MSG,
+            ephemeral=True,
+        )
+        return False
+
     if not interaction.guild:
         await interaction.response.send_message(
             "This command can only be used in a server.",
@@ -102,6 +127,14 @@ async def check_minigame_channel(
 
     guild_id = str(interaction.guild.id)
     channel_id = str(interaction.channel_id)
+
+    # Check if minigame is enabled for this guild
+    if not is_minigame_enabled(guild_id):
+        await interaction.response.send_message(
+            MINIGAME_DISABLED_GUILD_MSG,
+            ephemeral=True,
+        )
+        return False
 
     settings = get_guild_settings(guild_id)
     minigame_channel_id = settings.get("minigame_channel_id")
@@ -164,6 +197,68 @@ class MinigameCommands(commands.Cog):
         name="minigame",
         description="Minigame system commands",
     )
+
+    @minigame_group.command(
+        name="enable",
+        description="Enable the minigame system for this server (Admin only)",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def enable_minigame(self, interaction: discord.Interaction):
+        """Enable the minigame system for this guild."""
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "This command can only be used in a server.",
+                ephemeral=True,
+            )
+            return
+
+        # Check global toggle
+        if not MINIGAME_GLOBALLY_ENABLED:
+            await interaction.response.send_message(
+                MINIGAME_DISABLED_GLOBAL_MSG,
+                ephemeral=True,
+            )
+            return
+
+        guild_id = str(interaction.guild.id)
+        set_minigame_enabled(guild_id, True)
+
+        embed = discord.Embed(
+            title="✅ Minigame System Enabled",
+            description=(
+                "The minigame system is now enabled for this server.\n"
+                "Use `/minigame set-channel` to configure the minigame channel."
+            ),
+            color=discord.Color.green(),
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @minigame_group.command(
+        name="disable",
+        description="Disable the minigame system for this server (Admin only)",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def disable_minigame(self, interaction: discord.Interaction):
+        """Disable the minigame system for this guild."""
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "This command can only be used in a server.",
+                ephemeral=True,
+            )
+            return
+
+        guild_id = str(interaction.guild.id)
+        set_minigame_enabled(guild_id, False)
+
+        embed = discord.Embed(
+            title="🔒 Minigame System Disabled",
+            description=(
+                "The minigame system has been disabled for this server.\n"
+                "All minigame commands will be unavailable until re-enabled."
+            ),
+            color=discord.Color.orange(),
+        )
+        await interaction.response.send_message(embed=embed)
 
     @minigame_group.command(
         name="set-channel",
@@ -320,6 +415,18 @@ class MinigameCommands(commands.Cog):
             color=discord.Color.blue(),
         )
 
+        # System status
+        minigame_enabled = settings.get("minigame_enabled", 1)
+        embed.add_field(
+            name="System Status",
+            value=(
+                "✅ Enabled" if minigame_enabled and MINIGAME_GLOBALLY_ENABLED
+                else "❌ Disabled (Global)" if not MINIGAME_GLOBALLY_ENABLED
+                else "❌ Disabled (Guild)"
+            ),
+            inline=True,
+        )
+
         # Channel settings
         mg_channel = settings.get("minigame_channel_id")
         if mg_channel:
@@ -344,7 +451,10 @@ class MinigameCommands(commands.Cog):
         # Economy settings
         embed.add_field(
             name="XP Trading",
-            value="✅ Enabled" if settings.get("xp_trading_enabled") else "❌ Disabled",
+            value=(
+                "✅ Enabled" if settings.get("xp_trading_enabled")
+                else "❌ Disabled"
+            ),
             inline=True,
         )
 
