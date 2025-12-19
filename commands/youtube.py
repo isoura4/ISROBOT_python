@@ -137,6 +137,8 @@ class YouTube(commands.Cog):
             return
 
         # Ajouter la chaîne à la base de données
+        # Note: notifyLive et lastLiveId sont conservés dans la DB pour la compatibilité
+        # mais sont désactivés (0 et None) car la fonctionnalité live est supprimée
         conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
@@ -152,10 +154,10 @@ class YouTube(commands.Cog):
                 str(ping_role.id) if ping_role else None,
                 1 if notify_videos else 0,
                 1 if notify_shorts else 0,
-                0,
+                0,  # notifyLive désactivé (fonctionnalité supprimée)
                 last_video_id,
                 last_short_id,
-                None,
+                None,  # lastLiveId non utilisé (fonctionnalité supprimée)
             ),
         )
         conn.commit()
