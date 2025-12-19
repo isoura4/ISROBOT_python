@@ -261,12 +261,9 @@ class ISROBOT(commands.Bot):
             await asyncio.sleep(300)
 
     async def check_youtube_loop(self):
-        """Vérifier périodiquement les nouvelles vidéos, shorts et lives YouTube."""
+        """Vérifier périodiquement les nouvelles vidéos et shorts YouTube."""
         await self.wait_until_ready()  # Attendre que le bot soit prêt
         logger.info("Démarrage de la boucle de vérification YouTube")
-        
-        # Compteur pour vérifier les lives moins souvent (toutes les 2 boucles = ~20 min)
-        live_check_counter = 0
 
         while not self.is_closed():
             try:
@@ -302,10 +299,8 @@ class ISROBOT(commands.Bot):
                             )  # discordChannelId
                             last_video_id = channel_data[5]  # lastVideoId
                             last_short_id = channel_data[6]  # lastShortId
-                            last_live_id = channel_data[7]  # lastLiveId
                             notify_videos = channel_data[8]  # notifyVideos
                             notify_shorts = channel_data[9]  # notifyShorts
-                            notify_live = channel_data[10]  # notifyLive
 
                             print(
                                 f"  → Vérification de la chaîne YouTube: "
@@ -314,8 +309,7 @@ class ISROBOT(commands.Bot):
                             print(
                                 f"    ℹ Notifications activées: "
                                 f"vidéos={bool(notify_videos)}, "
-                                f"shorts={bool(notify_shorts)}, "
-                                f"live={bool(notify_live)}"
+                                f"shorts={bool(notify_shorts)}"
                             )
                             logger.debug(
                                 f"Vérification de {channel_name} "
@@ -350,7 +344,7 @@ class ISROBOT(commands.Bot):
                             announcer = AnnounceYouTube(self)
 
                             # Vérifier si au moins un type de notification est activé
-                            if not notify_videos and not notify_shorts and not notify_live:
+                            if not notify_videos and not notify_shorts:
                                 print(
                                     f"    ⚠ Aucune notification activée pour "
                                     f"{channel_name} - ignorer"
@@ -359,102 +353,6 @@ class ISROBOT(commands.Bot):
                                     f"Aucune notification activée pour {channel_name}"
                                 )
                                 continue
-                            
-                            # Ne vérifier les lives que toutes les 2 boucles (économiser le quota API - 100 unités par vérification!)
-                            should_check_live = (live_check_counter % 2 == 0)
-
-                            # Vérifier les lives (seulement si activé et si c'est le bon cycle)
-                            if notify_live and should_check_live:
-                                print(
-                                    f"    → Vérification des lives pour "
-                                    f"{channel_name}"
-                                )
-                                try:
-                                    live_videos = (
-                                        await youtube_checker.check_live_status(
-                                            channel_id
-                                        )
-                                    )
-                                    if live_videos and len(live_videos) > 0:
-                                        latest_live = live_videos[0]
-                                        live_id = latest_live["id"]["videoId"]
-
-                                        print(
-                                            f"      ✓ Live détecté: "
-                                            f"{latest_live['snippet']['title']}"
-                                        )
-                                        logger.debug(
-                                            f"Live détecté pour {channel_name}: "
-                                            f"{live_id}"
-                                        )
-
-                                        # Si c'est un nouveau live
-                                        if live_id != last_live_id:
-                                            live_title = latest_live["snippet"]["title"]
-                                            thumbnail_url = latest_live["snippet"][
-                                                "thumbnails"
-                                            ]["high"]["url"]
-                                            await announcer.announce_live(
-                                                channel_id,
-                                                channel_name,
-                                                discord_channel,
-                                                live_id,
-                                                live_title,
-                                                thumbnail_url,
-                                            )
-
-                                            # Mettre à jour lastLiveId
-                                            conn = database.get_db_connection()
-                                            try:
-                                                cursor = conn.cursor()
-                                                cursor.execute(
-                                                    "UPDATE youtube_channels SET lastLiveId = ? WHERE id = ?",
-                                                    (live_id, channel_data[0]),
-                                                )
-                                                conn.commit()
-                                                logger.info(
-                                                    f"Annonce live envoyée pour {channel_name}"
-                                                )
-                                            finally:
-                                                conn.close()
-                                    else:
-                                        print(
-                                            f"      ✗ Pas de live en cours pour "
-                                            f"{channel_name}"
-                                        )
-                                        logger.debug(
-                                            f"Aucun live en cours pour "
-                                            f"{channel_name}"
-                                        )
-                                        # Pas de live en cours, réinitialiser lastLiveId
-                                        if last_live_id:
-                                            conn = database.get_db_connection()
-                                            try:
-                                                cursor = conn.cursor()
-                                                cursor.execute(
-                                                    "UPDATE youtube_channels SET lastLiveId = NULL WHERE id = ?",
-                                                    (channel_data[0],),
-                                                )
-                                                conn.commit()
-                                                logger.debug(
-                                                    f"Réinitialisation lastLiveId pour {channel_name}"
-                                                )
-                                            finally:
-                                                conn.close()
-                                except discord.errors.Forbidden as e:
-                                    logger.error(
-                                        f"Permission Discord refusée pour {channel_name} lors de l'annonce du live: {e}"
-                                    )
-
-                                except Exception as e:
-                                    logger.error(
-                                        f"Erreur lors de la vérification du live pour {channel_name}: {e}"
-                                    )
-                            elif notify_live and not should_check_live:
-                                print(
-                                    f"    ⊗ Vérification des lives ignorée pour {channel_name} "
-                                    f"(économie du quota API - vérification 1x/2 cycles)"
-                                )
 
                             # Vérifier les nouvelles vidéos et shorts
                             if notify_videos or notify_shorts:
@@ -650,9 +548,6 @@ class ISROBOT(commands.Bot):
                     )
                 else:
                     logger.error(f"Erreur lors de la vérification YouTube: {e}")
-            
-            # Incrémenter le compteur de vérification live
-            live_check_counter += 1
 
             # Attendre 10 minutes avant la prochaine vérification (optimisé pour ~9500 unités/jour)
             await asyncio.sleep(600)

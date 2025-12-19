@@ -38,7 +38,6 @@ class YouTube(commands.Cog):
         channel: discord.TextChannel,
         notify_videos: bool = True,
         notify_shorts: bool = True,
-        notify_live: bool = True,
         ping_role: discord.Role = None,
     ):
         """Ajouter une chaîne YouTube à surveiller. Accepte un ID de chaîne ou un handle (ex: @nom_chaine)."""
@@ -99,7 +98,6 @@ class YouTube(commands.Cog):
                 # Initialiser les IDs de suivi pour éviter d'annoncer l'ancien contenu
                 last_video_id = None
                 last_short_id = None
-                last_live_id = None
 
                 # Récupérer les dernières vidéos pour initialiser les IDs de suivi
                 latest_uploads = await checker.get_latest_uploads(
@@ -127,12 +125,6 @@ class YouTube(commands.Cog):
                         if last_video_id and last_short_id:
                             break
 
-                # Vérifier s'il y a un live en cours
-                if notify_live:
-                    live_videos = await checker.check_live_status(actual_channel_id)
-                    if live_videos and len(live_videos) > 0:
-                        last_live_id = live_videos[0]["id"]["videoId"]
-
         except Exception as e:
             error_message = str(e)
             await interaction.response.send_message(
@@ -149,8 +141,8 @@ class YouTube(commands.Cog):
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO youtube_channels
-               (channelId, channelName, discordChannelId, roleId, 
-                notifyVideos, notifyShorts, notifyLive, 
+               (channelId, channelName, discordChannelId, roleId,
+                notifyVideos, notifyShorts, notifyLive,
                 lastVideoId, lastShortId, lastLiveId)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
@@ -160,10 +152,10 @@ class YouTube(commands.Cog):
                 str(ping_role.id) if ping_role else None,
                 1 if notify_videos else 0,
                 1 if notify_shorts else 0,
-                1 if notify_live else 0,
+                0,
                 last_video_id,
                 last_short_id,
-                last_live_id,
+                None,
             ),
         )
         conn.commit()
@@ -175,8 +167,6 @@ class YouTube(commands.Cog):
             notifications.append("vidéos")
         if notify_shorts:
             notifications.append("shorts")
-        if notify_live:
-            notifications.append("lives")
 
         notif_text = (
             ", ".join(notifications) if notifications else "aucune notification"
@@ -201,8 +191,6 @@ class YouTube(commands.Cog):
             tracking_info.append(f"Dernière vidéo: {last_video_id[:8]}...")
         if last_short_id:
             tracking_info.append(f"Dernier short: {last_short_id[:8]}...")
-        if last_live_id:
-            tracking_info.append(f"Live en cours: {last_live_id[:8]}...")
 
         tracking_text = (
             "\nSuivi initialisé: " + ", ".join(tracking_info)
@@ -506,50 +494,6 @@ class CheckYouTubeChannel:
                 return data["items"][0]
             return None
 
-    async def check_live_status(self, channel_id: str):
-        """Vérifier si une chaîne est en live."""
-        if not self.api_key:
-            raise ValueError("La clé API YouTube n'est pas configurée.")
-
-        url = "https://www.googleapis.com/youtube/v3/search"
-        params = {
-            "part": "snippet",
-            "channelId": channel_id,
-            "eventType": "live",
-            "type": "video",
-            "key": self.api_key,
-        }
-
-        async with self.session.get(url, params=params) as response:
-            if response.status == 404:
-                logger.warning(
-                    f"Canal YouTube introuvable lors de la vérification du live (404): {channel_id}"
-                )
-                return []
-            if response.status != 200:
-                try:
-                    error_data = (
-                        await response.json()
-                        if response.content_type == "application/json"
-                        else {}
-                    )
-                except (aiohttp.ContentTypeError, ValueError):
-                    error_data = {}
-                error_msg = error_data.get("error", {}).get(
-                    "message", f"Status {response.status}"
-                )
-                raise Exception(
-                    f"Erreur lors de la vérification du statut live: {error_msg}"
-                )
-            try:
-                data = await response.json()
-            except Exception as e:
-                logger.error(
-                    f"Erreur lors du parsing JSON pour le statut live du canal {channel_id}: {e}"
-                )
-                return []
-            return data.get("items", [])
-
 
 def is_short(video_duration: str) -> bool:
     """Déterminer si une vidéo est un short basé sur sa durée (moins de 61 secondes)."""
@@ -630,33 +574,6 @@ class AnnounceYouTube:
             title=f"🎬 Nouveau short : {video_title}",
             description=f"**Chaîne** : {channel_name}\n**Regardez le short ici :** https://www.youtube.com/shorts/{video_id}",
             color=discord.Color.orange(),
-        )
-        if thumbnail_url:
-            embed.set_image(url=thumbnail_url)
-
-        if discord_role is not None:
-            await discord_channel.send(content=discord_role.mention, embed=embed)
-        else:
-            await discord_channel.send(embed=embed)
-
-    async def announce_live(
-        self,
-        channel_id: str,
-        channel_name: str,
-        discord_channel: discord.TextChannel,
-        video_id: str,
-        video_title: str,
-        thumbnail_url: str,
-        discord_role: Optional[discord.Role] = None,
-    ):
-        """Annoncer un nouveau live dans un salon Discord."""
-        if discord_role is None:
-            discord_role = await self.get_role(channel_id)
-
-        embed = discord.Embed(
-            title=f"🔴 EN DIRECT : {video_title}",
-            description=f"**Chaîne** : {channel_name}\n**Regardez le live ici :** https://www.youtube.com/watch?v={video_id}",
-            color=discord.Color.from_rgb(255, 0, 0),
         )
         if thumbnail_url:
             embed.set_image(url=thumbnail_url)
