@@ -452,12 +452,18 @@ class ISROBOT(commands.Bot):
                                                         (video_id, channel_data[0]),
                                                     )
                                                     conn.commit()
+                                                    # Update local variable only after successful commit
+                                                    last_short_id = video_id
+                                                    announced_short_in_this_cycle = True
                                                     logger.info(
                                                         f"lastShortId mis à jour pour {channel_name}: {video_id}"
                                                     )
-                                                    # Update local variable to prevent duplicate in same cycle
-                                                    last_short_id = video_id
-                                                    announced_short_in_this_cycle = True
+                                                except Exception as e:
+                                                    logger.error(
+                                                        f"Erreur lors de la mise à jour de lastShortId pour {channel_name}: {e}"
+                                                    )
+                                                    # Don't announce if database update failed
+                                                    raise
                                                 finally:
                                                     conn.close()
 
@@ -502,12 +508,18 @@ class ISROBOT(commands.Bot):
                                                         (video_id, channel_data[0]),
                                                     )
                                                     conn.commit()
+                                                    # Update local variable only after successful commit
+                                                    last_video_id = video_id
+                                                    announced_video_in_this_cycle = True
                                                     logger.info(
                                                         f"lastVideoId mis à jour pour {channel_name}: {video_id}"
                                                     )
-                                                    # Update local variable to prevent duplicate in same cycle
-                                                    last_video_id = video_id
-                                                    announced_video_in_this_cycle = True
+                                                except Exception as e:
+                                                    logger.error(
+                                                        f"Erreur lors de la mise à jour de lastVideoId pour {channel_name}: {e}"
+                                                    )
+                                                    # Don't announce if database update failed
+                                                    raise
                                                 finally:
                                                     conn.close()
 
