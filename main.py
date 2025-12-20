@@ -270,7 +270,8 @@ class ISROBOT(commands.Bot):
         """
         try:
             # Parse the ISO 8601 timestamp from YouTube API
-            # YouTube API returns timestamps in format: YYYY-MM-DDTHH:MM:SSZ
+            # YouTube API always returns timestamps in format: YYYY-MM-DDTHH:MM:SSZ
+            # The 'Z' suffix indicates UTC timezone and is replaced with '+00:00' for Python's fromisoformat()
             published_at = datetime.fromisoformat(published_at_str.replace('Z', '+00:00'))
             now = datetime.now(timezone.utc)
             time_diff = now - published_at
@@ -428,7 +429,9 @@ class ISROBOT(commands.Bot):
 
                                         # Check if the content was published recently (within 24 hours)
                                         # Note: We rely on YouTube API returning items in reverse chronological order
-                                        # (newest first). If an item is older than 24h, we can stop checking.
+                                        # (newest first). Since the API returns both videos and shorts mixed together
+                                        # in the uploads playlist, if an item is older than 24h, ALL subsequent items
+                                        # will also be older (regardless of type), so we can safely break.
                                         if not self._is_recently_published(published_at, hours=24):
                                             print(
                                                 f"        ⏭ Contenu trop ancien ignoré "
@@ -438,8 +441,7 @@ class ISROBOT(commands.Bot):
                                                 f"Contenu ignoré car trop ancien pour "
                                                 f"{channel_name}: {video_id} (date: {published_at})"
                                             )
-                                            # Stop checking once we reach content older than 24 hours
-                                            # Since YouTube API returns newest first, all subsequent items will be older
+                                            # Stop checking: all subsequent items will be older than this one
                                             break
 
                                         # Récupérer les détails de la vidéo pour déterminer si c'est un short
