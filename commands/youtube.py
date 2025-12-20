@@ -372,7 +372,12 @@ class CheckYouTubeChannel:
             return None
 
     async def get_latest_uploads(self, channel_id: str, max_results: int = 5):
-        """Récupérer les dernières vidéos d'une chaîne YouTube."""
+        """Récupérer les dernières vidéos d'une chaîne YouTube.
+
+        Note: YouTube API returns playlist items in reverse chronological order
+        (newest first). This ordering is relied upon in check_youtube_loop() for
+        date-based filtering and early stopping optimizations.
+        """
         if not self.api_key:
             raise ValueError("La clé API YouTube n'est pas configurée.")
 

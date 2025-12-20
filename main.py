@@ -1,5 +1,6 @@
 # Importation des bibliothèques et modules
 import asyncio
+from datetime import datetime, timedelta, timezone
 import logging
 import os
 from pathlib import Path
@@ -257,6 +258,30 @@ class ISROBOT(commands.Bot):
             # Attendre 5 minutes avant la prochaine vérification
             await asyncio.sleep(300)
 
+    def _is_recently_published(self, published_at_str: str, hours: int = 24) -> bool:
+        """Check if content was published within the specified number of hours.
+
+        Args:
+            published_at_str: ISO 8601 timestamp string from YouTube API (e.g., "2025-12-20T12:00:00Z")
+            hours: Number of hours to consider as "recent" (default: 24)
+
+        Returns:
+            True if published within the specified hours, False otherwise
+        """
+        try:
+            # Parse the ISO 8601 timestamp from YouTube API
+            # YouTube API always returns timestamps in format: YYYY-MM-DDTHH:MM:SSZ
+            # The 'Z' suffix indicates UTC timezone and is replaced with '+00:00' for Python's fromisoformat()
+            published_at = datetime.fromisoformat(published_at_str.replace('Z', '+00:00'))
+            now = datetime.now(timezone.utc)
+            time_diff = now - published_at
+
+            return time_diff <= timedelta(hours=hours)
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.error(f"Error parsing published date '{published_at_str}': {e}")
+            # If we can't parse the date, assume it's old to be safe
+            return False
+
     async def check_youtube_loop(self):
         """Vérifier périodiquement les nouvelles vidéos et shorts YouTube."""
         await self.wait_until_ready()  # Attendre que le bot soit prêt
@@ -374,6 +399,10 @@ class ISROBOT(commands.Bot):
                                     most_recent_video_id = last_video_id
                                     most_recent_short_id = last_short_id
 
+                                    # Track if we've found the last known content (to stop checking older content)
+                                    found_last_video = False
+                                    found_last_short = False
+
                                     if not latest_uploads:
                                         print(
                                             f"      ℹ Aucune vidéo trouvée pour "
@@ -394,6 +423,26 @@ class ISROBOT(commands.Bot):
                                         video_id = upload["snippet"]["resourceId"][
                                             "videoId"
                                         ]
+
+                                        # Get the published date from the upload snippet
+                                        published_at = upload["snippet"].get("publishedAt", "")
+
+                                        # Check if the content was published recently (within 24 hours)
+                                        # Note: We rely on YouTube API returning items in reverse chronological order
+                                        # (newest first). Since the API returns both videos and shorts mixed together
+                                        # in the uploads playlist, if an item is older than 24h, ALL subsequent items
+                                        # will also be older (regardless of type), so we can safely break.
+                                        if not self._is_recently_published(published_at, hours=24):
+                                            print(
+                                                f"        ⏭ Contenu trop ancien ignoré "
+                                                f"(publié le {published_at[:10]}): {video_id[:8]}..."
+                                            )
+                                            logger.debug(
+                                                f"Contenu ignoré car trop ancien pour "
+                                                f"{channel_name}: {video_id} (date: {published_at})"
+                                            )
+                                            # Stop checking: all subsequent items will be older than this one
+                                            break
 
                                         # Récupérer les détails de la vidéo pour déterminer si c'est un short
                                         video_details = (
@@ -432,11 +481,25 @@ class ISROBOT(commands.Bot):
 
                                         # Process shorts
                                         if is_short_video:
+                                            # Check if this is the last known short (stop checking older shorts)
+                                            if video_id == last_short_id:
+                                                found_last_short = True
+                                                print(
+                                                    f"          ℹ Short déjà connu trouvé "
+                                                    f"(ID: {video_id[:8]}...) - arrêt de la vérification des shorts plus anciens"
+                                                )
+                                                # Continue to check remaining uploads (may still have new videos)
+                                                continue
+
+                                            # Skip if we've already found the last known short
+                                            if found_last_short:
+                                                print(
+                                                    f"          ⏭ Short ignoré (plus ancien que le dernier connu): {video_id[:8]}..."
+                                                )
+                                                continue
+
                                             # Check if this is new content (not previously announced)
-                                            if (
-                                                notify_shorts
-                                                and video_id != last_short_id
-                                            ):
+                                            if notify_shorts:
                                                 # Update the most recent short ID only if this is new content
                                                 # Since YouTube API returns newest first, only update on first new short
                                                 # This ensures we track the newest short, not an older one
@@ -471,19 +534,28 @@ class ISROBOT(commands.Bot):
                                                     "          ⊗ Short ignoré "
                                                     "(notifications désactivées)"
                                                 )
-                                            else:
-                                                print(
-                                                    f"          ℹ Short déjà connu "
-                                                    f"(ID: {video_id[:8]}...)"
-                                                )
 
                                         # Process regular videos
                                         else:
+                                            # Check if this is the last known video (stop checking older videos)
+                                            if video_id == last_video_id:
+                                                found_last_video = True
+                                                print(
+                                                    f"          ℹ Vidéo déjà connue trouvée "
+                                                    f"(ID: {video_id[:8]}...) - arrêt de la vérification des vidéos plus anciennes"
+                                                )
+                                                # Continue to check remaining uploads (may still have new shorts)
+                                                continue
+
+                                            # Skip if we've already found the last known video
+                                            if found_last_video:
+                                                print(
+                                                    f"          ⏭ Vidéo ignorée (plus ancienne que la dernière connue): {video_id[:8]}..."
+                                                )
+                                                continue
+
                                             # Check if this is new content (not previously announced)
-                                            if (
-                                                notify_videos
-                                                and video_id != last_video_id
-                                            ):
+                                            if notify_videos:
                                                 # Update the most recent video ID only if this is new content
                                                 # Since YouTube API returns newest first, only update on first new video
                                                 # This ensures we track the newest video, not an older one
@@ -517,11 +589,6 @@ class ISROBOT(commands.Bot):
                                                 print(
                                                     "          ⊗ Vidéo ignorée "
                                                     "(notifications désactivées)"
-                                                )
-                                            else:
-                                                print(
-                                                    f"          ℹ Vidéo déjà connue "
-                                                    f"(ID: {video_id[:8]}...)"
                                                 )
 
                                     # Second pass: update database with most recent IDs and announce new content
