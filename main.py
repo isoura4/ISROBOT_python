@@ -270,12 +270,13 @@ class ISROBOT(commands.Bot):
         """
         try:
             # Parse the ISO 8601 timestamp from YouTube API
+            # YouTube API returns timestamps in format: YYYY-MM-DDTHH:MM:SSZ
             published_at = datetime.fromisoformat(published_at_str.replace('Z', '+00:00'))
             now = datetime.now(timezone.utc)
             time_diff = now - published_at
 
             return time_diff <= timedelta(hours=hours)
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"Error parsing published date '{published_at_str}': {e}")
             # If we can't parse the date, assume it's old to be safe
             return False
@@ -426,6 +427,8 @@ class ISROBOT(commands.Bot):
                                         published_at = upload["snippet"].get("publishedAt", "")
 
                                         # Check if the content was published recently (within 24 hours)
+                                        # Note: We rely on YouTube API returning items in reverse chronological order
+                                        # (newest first). If an item is older than 24h, we can stop checking.
                                         if not self._is_recently_published(published_at, hours=24):
                                             print(
                                                 f"        ⏭ Contenu trop ancien ignoré "
@@ -483,7 +486,7 @@ class ISROBOT(commands.Bot):
                                                     f"          ℹ Short déjà connu trouvé "
                                                     f"(ID: {video_id[:8]}...) - arrêt de la vérification des shorts plus anciens"
                                                 )
-                                                # Don't break here, continue to check for videos
+                                                # Continue to check remaining uploads (may still have new videos)
                                                 continue
 
                                             # Skip if we've already found the last known short
@@ -539,7 +542,7 @@ class ISROBOT(commands.Bot):
                                                     f"          ℹ Vidéo déjà connue trouvée "
                                                     f"(ID: {video_id[:8]}...) - arrêt de la vérification des vidéos plus anciennes"
                                                 )
-                                                # Don't break here, continue to check for shorts
+                                                # Continue to check remaining uploads (may still have new shorts)
                                                 continue
 
                                             # Skip if we've already found the last known video
