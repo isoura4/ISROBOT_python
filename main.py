@@ -372,6 +372,11 @@ class ISROBOT(commands.Bot):
                                         )
                                     )
 
+                                    # Track announced content in this cycle to prevent duplicates
+                                    # Separate flags for videos and shorts since they're different content types
+                                    announced_short_in_this_cycle = False
+                                    announced_video_in_this_cycle = False
+
                                     if not latest_uploads:
                                         print(
                                             f"      ℹ Aucune vidéo trouvée pour "
@@ -427,7 +432,7 @@ class ISROBOT(commands.Bot):
 
                                         # Annoncer les shorts
                                         if is_short_video and notify_shorts:
-                                            if video_id != last_short_id:
+                                            if video_id != last_short_id and not announced_short_in_this_cycle:
                                                 print(
                                                     f"          ✓ Nouveau short "
                                                     f"détecté: {video_title[:50]}..."
@@ -436,17 +441,11 @@ class ISROBOT(commands.Bot):
                                                     f"Nouveau short détecté pour "
                                                     f"{channel_name}: {video_id}"
                                                 )
-                                                await announcer.announce_short(
-                                                    channel_id,
-                                                    channel_name,
-                                                    discord_channel,
-                                                    video_id,
-                                                    video_title,
-                                                    thumbnail_url,
-                                                )
 
-                                                # Mettre à jour lastShortId
+                                                # Mettre à jour lastShortId AVANT d'annoncer
+                                                # pour éviter les doublons en cas d'échec de l'annonce
                                                 conn = database.get_db_connection()
+                                                db_update_success = False
                                                 try:
                                                     cursor = conn.cursor()
                                                     cursor.execute(
@@ -454,12 +453,37 @@ class ISROBOT(commands.Bot):
                                                         (video_id, channel_data[0]),
                                                     )
                                                     conn.commit()
+                                                    # Update local variable only after successful commit
+                                                    last_short_id = video_id
+                                                    announced_short_in_this_cycle = True
+                                                    db_update_success = True
+                                                    logger.info(
+                                                        f"lastShortId mis à jour pour {channel_name}: {video_id}"
+                                                    )
+                                                except Exception as e:
+                                                    logger.error(
+                                                        f"Erreur lors de la mise à jour de lastShortId pour {channel_name}: {e}"
+                                                    )
+                                                    # Skip this video but continue processing others
+                                                    continue
+                                                finally:
+                                                    conn.close()
+
+                                                # Only announce if database update succeeded
+                                                if db_update_success:
+                                                    # Annoncer le short après la mise à jour de la base de données
+                                                    await announcer.announce_short(
+                                                        channel_id,
+                                                        channel_name,
+                                                        discord_channel,
+                                                        video_id,
+                                                        video_title,
+                                                        thumbnail_url,
+                                                    )
                                                     logger.info(
                                                         f"Annonce short envoyée pour {channel_name}"
                                                     )
-                                                finally:
-                                                    conn.close()
-                                                break  # Ne traiter qu'un seul nouveau short à la fois
+                                                    break  # Ne traiter qu'un seul nouveau short à la fois
                                             else:
                                                 print(
                                                     f"          ℹ Short déjà connu "
@@ -468,7 +492,7 @@ class ISROBOT(commands.Bot):
 
                                         # Annoncer les vidéos normales
                                         elif not is_short_video and notify_videos:
-                                            if video_id != last_video_id:
+                                            if video_id != last_video_id and not announced_video_in_this_cycle:
                                                 print(
                                                     f"          ✓ Nouvelle vidéo "
                                                     f"détectée: {video_title[:50]}..."
@@ -477,17 +501,11 @@ class ISROBOT(commands.Bot):
                                                     f"Nouvelle vidéo détectée pour "
                                                     f"{channel_name}: {video_id}"
                                                 )
-                                                await announcer.announce_video(
-                                                    channel_id,
-                                                    channel_name,
-                                                    discord_channel,
-                                                    video_id,
-                                                    video_title,
-                                                    thumbnail_url,
-                                                )
 
-                                                # Mettre à jour lastVideoId
+                                                # Mettre à jour lastVideoId AVANT d'annoncer
+                                                # pour éviter les doublons en cas d'échec de l'annonce
                                                 conn = database.get_db_connection()
+                                                db_update_success = False
                                                 try:
                                                     cursor = conn.cursor()
                                                     cursor.execute(
@@ -495,12 +513,37 @@ class ISROBOT(commands.Bot):
                                                         (video_id, channel_data[0]),
                                                     )
                                                     conn.commit()
+                                                    # Update local variable only after successful commit
+                                                    last_video_id = video_id
+                                                    announced_video_in_this_cycle = True
+                                                    db_update_success = True
+                                                    logger.info(
+                                                        f"lastVideoId mis à jour pour {channel_name}: {video_id}"
+                                                    )
+                                                except Exception as e:
+                                                    logger.error(
+                                                        f"Erreur lors de la mise à jour de lastVideoId pour {channel_name}: {e}"
+                                                    )
+                                                    # Skip this video but continue processing others
+                                                    continue
+                                                finally:
+                                                    conn.close()
+
+                                                # Only announce if database update succeeded
+                                                if db_update_success:
+                                                    # Annoncer la vidéo après la mise à jour de la base de données
+                                                    await announcer.announce_video(
+                                                        channel_id,
+                                                        channel_name,
+                                                        discord_channel,
+                                                        video_id,
+                                                        video_title,
+                                                        thumbnail_url,
+                                                    )
                                                     logger.info(
                                                         f"Annonce vidéo envoyée pour {channel_name}"
                                                     )
-                                                finally:
-                                                    conn.close()
-                                                break  # Ne traiter qu'une seule nouvelle vidéo à la fois
+                                                    break  # Ne traiter qu'une seule nouvelle vidéo à la fois
                                             else:
                                                 print(
                                                     f"          ℹ Vidéo déjà connue "
