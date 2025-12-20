@@ -438,7 +438,8 @@ class ISROBOT(commands.Bot):
                                                 and video_id != last_short_id
                                             ):
                                                 # Update the most recent short ID only if this is new content
-                                                # Since API returns newest first, only update on first new short
+                                                # Since YouTube API returns newest first, only update on first new short
+                                                # This ensures we track the newest short, not an older one
                                                 if (
                                                     most_recent_short_id
                                                     == last_short_id
@@ -484,7 +485,8 @@ class ISROBOT(commands.Bot):
                                                 and video_id != last_video_id
                                             ):
                                                 # Update the most recent video ID only if this is new content
-                                                # Since API returns newest first, only update on first new video
+                                                # Since YouTube API returns newest first, only update on first new video
+                                                # This ensures we track the newest video, not an older one
                                                 if (
                                                     most_recent_video_id
                                                     == last_video_id
