@@ -432,18 +432,19 @@ class ISROBOT(commands.Bot):
 
                                         # Process shorts
                                         if is_short_video:
-                                            # Update the most recent short ID we've seen
-                                            if (
-                                                most_recent_short_id is None
-                                                or video_id != last_short_id
-                                            ):
-                                                most_recent_short_id = video_id
-
                                             # Check if this is new content (not previously announced)
                                             if (
                                                 notify_shorts
                                                 and video_id != last_short_id
                                             ):
+                                                # Update the most recent short ID only if this is new content
+                                                # Since API returns newest first, only update on first new short
+                                                if (
+                                                    most_recent_short_id
+                                                    == last_short_id
+                                                ):
+                                                    most_recent_short_id = video_id
+
                                                 # Only announce if we haven't already selected one to announce
                                                 if newest_short_to_announce is None:
                                                     print(
@@ -477,18 +478,19 @@ class ISROBOT(commands.Bot):
 
                                         # Process regular videos
                                         else:
-                                            # Update the most recent video ID we've seen
-                                            if (
-                                                most_recent_video_id is None
-                                                or video_id != last_video_id
-                                            ):
-                                                most_recent_video_id = video_id
-
                                             # Check if this is new content (not previously announced)
                                             if (
                                                 notify_videos
                                                 and video_id != last_video_id
                                             ):
+                                                # Update the most recent video ID only if this is new content
+                                                # Since API returns newest first, only update on first new video
+                                                if (
+                                                    most_recent_video_id
+                                                    == last_video_id
+                                                ):
+                                                    most_recent_video_id = video_id
+
                                                 # Only announce if we haven't already selected one to announce
                                                 if newest_video_to_announce is None:
                                                     print(
