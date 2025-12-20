@@ -148,10 +148,10 @@ class ISROBOT(commands.Bot):
                     finally:
                         conn.close()
 
-                    print(f"🔍 [Twitch] Vérification de {len(streamers)} streamer(s)...")
-                    logger.debug(
-                        f"Vérification de {len(streamers)} streamer(s) Twitch"
+                    print(
+                        f"🔍 [Twitch] Vérification de {len(streamers)} streamer(s)..."
                     )
+                    logger.debug(f"Vérification de {len(streamers)} streamer(s) Twitch")
 
                     for streamer in streamers:
                         try:
@@ -186,9 +186,7 @@ class ISROBOT(commands.Bot):
                                 )
                                 # Vérifier si on a déjà annoncé ce stream
                                 if announced == 0:
-                                    channel = self.get_channel(
-                                        int(stream_channel_id)
-                                    )
+                                    channel = self.get_channel(int(stream_channel_id))
                                     if channel and isinstance(
                                         channel, discord.TextChannel
                                     ):
@@ -204,7 +202,10 @@ class ISROBOT(commands.Bot):
                                             "game_name", "Inconnu"
                                         )
                                         await announcer.announce(
-                                            streamer_name, channel, stream_title, category
+                                            streamer_name,
+                                            channel,
+                                            stream_title,
+                                            category,
                                         )
 
                                         # Marquer comme annoncé
@@ -222,18 +223,14 @@ class ISROBOT(commands.Bot):
                                         finally:
                                             conn.close()
                                 else:
-                                    print(
-                                        f"    ℹ {streamer_name} est déjà annoncé"
-                                    )
+                                    print(f"    ℹ {streamer_name} est déjà annoncé")
                                     logger.debug(
                                         f"{streamer_name} est en ligne mais "
                                         f"déjà annoncé"
                                     )
                             else:
                                 print(f"    ✗ {streamer_name} est hors ligne")
-                                logger.debug(
-                                    f"{streamer_name} n'est pas en ligne"
-                                )
+                                logger.debug(f"{streamer_name} n'est pas en ligne")
                                 # Le streamer n'est pas en ligne, réinitialiser le statut d'annonce
                                 if announced == 1:  # Si était annoncé
                                     conn = database.get_db_connection()
@@ -286,9 +283,7 @@ class ISROBOT(commands.Bot):
                         conn.close()
 
                     print(f"🔍 [YouTube] Vérification de {len(channels)} chaîne(s)...")
-                    logger.debug(
-                        f"Vérification de {len(channels)} chaîne(s) YouTube"
-                    )
+                    logger.debug(f"Vérification de {len(channels)} chaîne(s) YouTube")
 
                     for channel_data in channels:
                         try:
@@ -312,8 +307,7 @@ class ISROBOT(commands.Bot):
                                 f"shorts={bool(notify_shorts)}"
                             )
                             logger.debug(
-                                f"Vérification de {channel_name} "
-                                f"(ID: {channel_id})"
+                                f"Vérification de {channel_name} " f"(ID: {channel_id})"
                             )
 
                             discord_channel = self.get_channel(discord_channel_id)
@@ -372,10 +366,13 @@ class ISROBOT(commands.Bot):
                                         )
                                     )
 
-                                    # Track announced content in this cycle to prevent duplicates
-                                    # Separate flags for videos and shorts since they're different content types
-                                    announced_short_in_this_cycle = False
-                                    announced_video_in_this_cycle = False
+                                    # Track the newest content to announce (only one of each type per cycle)
+                                    newest_video_to_announce = None
+                                    newest_short_to_announce = None
+
+                                    # Track the most recent IDs we've seen (to update in DB)
+                                    most_recent_video_id = last_video_id
+                                    most_recent_short_id = last_short_id
 
                                     if not latest_uploads:
                                         print(
@@ -392,6 +389,7 @@ class ISROBOT(commands.Bot):
                                             f"trouvée(s) pour {channel_name}"
                                         )
 
+                                    # First pass: identify all new content and find the newest of each type
                                     for upload in latest_uploads:
                                         video_id = upload["snippet"]["resourceId"][
                                             "videoId"
@@ -423,144 +421,182 @@ class ISROBOT(commands.Bot):
                                         ]
 
                                         is_short_video = is_short(duration)
-                                        content_type = "short" if is_short_video else "vidéo"
+                                        content_type = (
+                                            "short" if is_short_video else "vidéo"
+                                        )
 
                                         print(
                                             f"        → Vérification: {content_type} "
                                             f"'{video_title[:50]}...' (ID: {video_id[:8]}...)"
                                         )
 
-                                        # Annoncer les shorts
-                                        if is_short_video and notify_shorts:
-                                            if video_id != last_short_id and not announced_short_in_this_cycle:
+                                        # Process shorts
+                                        if is_short_video:
+                                            # Check if this is new content (not previously announced)
+                                            if (
+                                                notify_shorts
+                                                and video_id != last_short_id
+                                            ):
+                                                # Update the most recent short ID only if this is new content
+                                                # Since YouTube API returns newest first, only update on first new short
+                                                # This ensures we track the newest short, not an older one
+                                                if (
+                                                    most_recent_short_id
+                                                    == last_short_id
+                                                ):
+                                                    most_recent_short_id = video_id
+
+                                                # Only announce if we haven't already selected one to announce
+                                                if newest_short_to_announce is None:
+                                                    print(
+                                                        f"          ✓ Nouveau short "
+                                                        f"détecté: {video_title[:50]}..."
+                                                    )
+                                                    logger.debug(
+                                                        f"Nouveau short détecté pour "
+                                                        f"{channel_name}: {video_id}"
+                                                    )
+                                                    newest_short_to_announce = {
+                                                        "video_id": video_id,
+                                                        "video_title": video_title,
+                                                        "thumbnail_url": thumbnail_url,
+                                                    }
+                                                else:
+                                                    print(
+                                                        f"          ℹ Short détecté mais ignoré "
+                                                        f"(un plus récent sera annoncé): {video_id[:8]}..."
+                                                    )
+                                            elif not notify_shorts:
                                                 print(
-                                                    f"          ✓ Nouveau short "
-                                                    f"détecté: {video_title[:50]}..."
+                                                    "          ⊗ Short ignoré "
+                                                    "(notifications désactivées)"
                                                 )
-                                                logger.debug(
-                                                    f"Nouveau short détecté pour "
-                                                    f"{channel_name}: {video_id}"
-                                                )
-
-                                                # Mettre à jour lastShortId AVANT d'annoncer
-                                                # pour éviter les doublons en cas d'échec de l'annonce
-                                                conn = database.get_db_connection()
-                                                db_update_success = False
-                                                try:
-                                                    cursor = conn.cursor()
-                                                    cursor.execute(
-                                                        "UPDATE youtube_channels SET lastShortId = ? WHERE id = ?",
-                                                        (video_id, channel_data[0]),
-                                                    )
-                                                    conn.commit()
-                                                    # Update local variable only after successful commit
-                                                    last_short_id = video_id
-                                                    announced_short_in_this_cycle = True
-                                                    db_update_success = True
-                                                    logger.info(
-                                                        f"lastShortId mis à jour pour {channel_name}: {video_id}"
-                                                    )
-                                                except Exception as e:
-                                                    logger.error(
-                                                        f"Erreur lors de la mise à jour de lastShortId pour {channel_name}: {e}"
-                                                    )
-                                                    # Skip this video but continue processing others
-                                                    continue
-                                                finally:
-                                                    conn.close()
-
-                                                # Only announce if database update succeeded
-                                                if db_update_success:
-                                                    # Annoncer le short après la mise à jour de la base de données
-                                                    await announcer.announce_short(
-                                                        channel_id,
-                                                        channel_name,
-                                                        discord_channel,
-                                                        video_id,
-                                                        video_title,
-                                                        thumbnail_url,
-                                                    )
-                                                    logger.info(
-                                                        f"Annonce short envoyée pour {channel_name}"
-                                                    )
-                                                    break  # Ne traiter qu'un seul nouveau short à la fois
                                             else:
                                                 print(
                                                     f"          ℹ Short déjà connu "
                                                     f"(ID: {video_id[:8]}...)"
                                                 )
 
-                                        # Annoncer les vidéos normales
-                                        elif not is_short_video and notify_videos:
-                                            if video_id != last_video_id and not announced_video_in_this_cycle:
+                                        # Process regular videos
+                                        else:
+                                            # Check if this is new content (not previously announced)
+                                            if (
+                                                notify_videos
+                                                and video_id != last_video_id
+                                            ):
+                                                # Update the most recent video ID only if this is new content
+                                                # Since YouTube API returns newest first, only update on first new video
+                                                # This ensures we track the newest video, not an older one
+                                                if (
+                                                    most_recent_video_id
+                                                    == last_video_id
+                                                ):
+                                                    most_recent_video_id = video_id
+
+                                                # Only announce if we haven't already selected one to announce
+                                                if newest_video_to_announce is None:
+                                                    print(
+                                                        f"          ✓ Nouvelle vidéo "
+                                                        f"détectée: {video_title[:50]}..."
+                                                    )
+                                                    logger.debug(
+                                                        f"Nouvelle vidéo détectée pour "
+                                                        f"{channel_name}: {video_id}"
+                                                    )
+                                                    newest_video_to_announce = {
+                                                        "video_id": video_id,
+                                                        "video_title": video_title,
+                                                        "thumbnail_url": thumbnail_url,
+                                                    }
+                                                else:
+                                                    print(
+                                                        f"          ℹ Vidéo détectée mais ignorée "
+                                                        f"(une plus récente sera annoncée): {video_id[:8]}..."
+                                                    )
+                                            elif not notify_videos:
                                                 print(
-                                                    f"          ✓ Nouvelle vidéo "
-                                                    f"détectée: {video_title[:50]}..."
+                                                    "          ⊗ Vidéo ignorée "
+                                                    "(notifications désactivées)"
                                                 )
-                                                logger.debug(
-                                                    f"Nouvelle vidéo détectée pour "
-                                                    f"{channel_name}: {video_id}"
-                                                )
-
-                                                # Mettre à jour lastVideoId AVANT d'annoncer
-                                                # pour éviter les doublons en cas d'échec de l'annonce
-                                                conn = database.get_db_connection()
-                                                db_update_success = False
-                                                try:
-                                                    cursor = conn.cursor()
-                                                    cursor.execute(
-                                                        "UPDATE youtube_channels SET lastVideoId = ? WHERE id = ?",
-                                                        (video_id, channel_data[0]),
-                                                    )
-                                                    conn.commit()
-                                                    # Update local variable only after successful commit
-                                                    last_video_id = video_id
-                                                    announced_video_in_this_cycle = True
-                                                    db_update_success = True
-                                                    logger.info(
-                                                        f"lastVideoId mis à jour pour {channel_name}: {video_id}"
-                                                    )
-                                                except Exception as e:
-                                                    logger.error(
-                                                        f"Erreur lors de la mise à jour de lastVideoId pour {channel_name}: {e}"
-                                                    )
-                                                    # Skip this video but continue processing others
-                                                    continue
-                                                finally:
-                                                    conn.close()
-
-                                                # Only announce if database update succeeded
-                                                if db_update_success:
-                                                    # Annoncer la vidéo après la mise à jour de la base de données
-                                                    await announcer.announce_video(
-                                                        channel_id,
-                                                        channel_name,
-                                                        discord_channel,
-                                                        video_id,
-                                                        video_title,
-                                                        thumbnail_url,
-                                                    )
-                                                    logger.info(
-                                                        f"Annonce vidéo envoyée pour {channel_name}"
-                                                    )
-                                                    break  # Ne traiter qu'une seule nouvelle vidéo à la fois
                                             else:
                                                 print(
                                                     f"          ℹ Vidéo déjà connue "
                                                     f"(ID: {video_id[:8]}...)"
                                                 )
-                                        else:
-                                            # Vidéo ignorée car les notifications sont désactivées pour ce type
-                                            if is_short_video and not notify_shorts:
-                                                print(
-                                                    "          ⊗ Short ignoré "
-                                                    "(notifications désactivées)"
-                                                )
-                                            elif not is_short_video and not notify_videos:
-                                                print(
-                                                    "          ⊗ Vidéo ignorée "
-                                                    "(notifications désactivées)"
-                                                )
+
+                                    # Second pass: update database with most recent IDs and announce new content
+                                    # Update database with the most recent IDs we found
+                                    if (
+                                        most_recent_video_id != last_video_id
+                                        or most_recent_short_id != last_short_id
+                                    ):
+                                        conn = database.get_db_connection()
+                                        try:
+                                            cursor = conn.cursor()
+
+                                            # Update both IDs in a single query to maintain consistency
+                                            cursor.execute(
+                                                "UPDATE youtube_channels SET lastVideoId = ?, lastShortId = ? WHERE id = ?",
+                                                (
+                                                    most_recent_video_id,
+                                                    most_recent_short_id,
+                                                    channel_data[0],
+                                                ),
+                                            )
+                                            conn.commit()
+                                            logger.info(
+                                                f"IDs mis à jour pour {channel_name}: "
+                                                f"lastVideoId={most_recent_video_id}, "
+                                                f"lastShortId={most_recent_short_id}"
+                                            )
+                                        except Exception as e:
+                                            logger.error(
+                                                f"Erreur lors de la mise à jour des IDs pour {channel_name}: {e}"
+                                            )
+                                        finally:
+                                            conn.close()
+
+                                    # Announce the newest short if we found one
+                                    if newest_short_to_announce:
+                                        try:
+                                            await announcer.announce_short(
+                                                channel_id,
+                                                channel_name,
+                                                discord_channel,
+                                                newest_short_to_announce["video_id"],
+                                                newest_short_to_announce["video_title"],
+                                                newest_short_to_announce[
+                                                    "thumbnail_url"
+                                                ],
+                                            )
+                                            logger.info(
+                                                f"Annonce short envoyée pour {channel_name}"
+                                            )
+                                        except Exception as e:
+                                            logger.error(
+                                                f"Erreur lors de l'annonce du short pour {channel_name}: {e}"
+                                            )
+
+                                    # Announce the newest video if we found one
+                                    if newest_video_to_announce:
+                                        try:
+                                            await announcer.announce_video(
+                                                channel_id,
+                                                channel_name,
+                                                discord_channel,
+                                                newest_video_to_announce["video_id"],
+                                                newest_video_to_announce["video_title"],
+                                                newest_video_to_announce[
+                                                    "thumbnail_url"
+                                                ],
+                                            )
+                                            logger.info(
+                                                f"Annonce vidéo envoyée pour {channel_name}"
+                                            )
+                                        except Exception as e:
+                                            logger.error(
+                                                f"Erreur lors de l'annonce de la vidéo pour {channel_name}: {e}"
+                                            )
 
                                 except discord.errors.Forbidden as e:
                                     logger.error(
