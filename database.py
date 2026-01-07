@@ -27,10 +27,13 @@ def get_db_connection():
             "Le chemin de la base de données n'est pas défini "
             "dans les variables d'environnement."
         )
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # Permet d'accéder aux colonnes par nom
-    return conn
+    
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=10.0)
+        conn.row_factory = sqlite3.Row  # Permet d'accéder aux colonnes par nom
+        return conn
+    except sqlite3.Error as e:
+        raise RuntimeError(f"Impossible de se connecter à la base de données {DB_PATH}: {e}")
 
 
 def create_database():

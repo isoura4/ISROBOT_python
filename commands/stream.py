@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from typing import Optional
 
@@ -12,6 +13,9 @@ import database
 
 # Chargement du fichier .env
 load_dotenv()
+
+# Logger pour ce module
+logger = logging.getLogger(__name__)
 
 # Récupération des variables d'environnement
 SERVER_ID = int(os.getenv("server_id", "0"))
@@ -35,32 +39,54 @@ class Stream(commands.Cog):
         channel: discord.TextChannel,
         ping_role: discord.Role = None,
     ):
+        # Validation des entrées
+        if not streamer_name or not streamer_name.strip():
+            await interaction.response.send_message(
+                "❌ Le nom du streamer ne peut pas être vide.", ephemeral=True
+            )
+            return
+        
+        # Nettoyer le nom du streamer (enlever les espaces et convertir en minuscules)
+        streamer_name = streamer_name.strip().lower()
+        
+        # Valider que le nom ne contient que des caractères alphanumériques et underscores
+        if not streamer_name.replace("_", "").isalnum():
+            await interaction.response.send_message(
+                "❌ Le nom du streamer ne peut contenir que des lettres, chiffres et underscores.", 
+                ephemeral=True
+            )
+            return
+        
         # Logique pour ajouter le streamer à la base de données
         if not TWITCH_CLIENT_ID or not TWITCH_CLIENT_SECRET:
             await interaction.response.send_message(
-                "Les identifiants Twitch ne sont pas configurés."
+                "❌ Les identifiants Twitch ne sont pas configurés.", ephemeral=True
             )
             return
-        else:
+        
+        try:
             # Connexion à la base de données SQLite:
             # Vérifier si le streamer existe déjà dans la base de données
             conn = database.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM streamers WHERE streamerName = ? AND streamChannelId = ?",
-                (streamer_name, str(channel.id)),
-            )
-            result = cursor.fetchone()
-            conn.close()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT * FROM streamers WHERE streamerName = ? AND streamChannelId = ?",
+                    (streamer_name, str(channel.id)),
+                )
+                result = cursor.fetchone()
+            finally:
+                conn.close()
 
             if result:
                 await interaction.response.send_message(
-                    f"Le streamer {streamer_name} est déjà dans la liste."
+                    f"ℹ️ Le streamer {streamer_name} est déjà dans la liste.", ephemeral=True
                 )
                 return
-            if result is None:
-                # Ajouter le streamer et le channel id sélectionné à la base de données
-                conn = database.get_db_connection()
+            
+            # Ajouter le streamer et le channel id sélectionné à la base de données
+            conn = database.get_db_connection()
+            try:
                 cursor = conn.cursor()
                 cursor.execute(
                     "INSERT INTO streamers (streamerName, streamChannelId, roleId) VALUES (?, ?, ?)",
@@ -71,15 +97,22 @@ class Stream(commands.Cog):
                     ),
                 )
                 conn.commit()
+            finally:
                 conn.close()
-                # Envoyer un message de confirmation
-                await interaction.response.send_message(
-                    f"Streamer ajouté : {streamer_name} dans le salon {channel.mention}."
+            
+            # Envoyer un message de confirmation
+            await interaction.response.send_message(
+                f"✅ Streamer ajouté : **{streamer_name}** dans le salon {channel.mention}."
+            )
+            if ping_role is not None:
+                await interaction.followup.send(
+                    f"L'annonce sera faite avec la mention: {ping_role.mention}"
                 )
-                if ping_role is not None:
-                    await interaction.followup.send(
-                        f"L'annonce sera faite avec la mention: {ping_role.mention}"
-                    )
+        except Exception as e:
+            logger.error(f"Erreur lors de l'ajout du streamer {streamer_name}: {e}")
+            await interaction.response.send_message(
+                f"❌ Erreur lors de l'ajout du streamer: {str(e)}", ephemeral=True
+            )
 
     async def check_streams(self):
         """Vérifier le statut de tous les streamers dans la base de données."""
@@ -103,32 +136,42 @@ class Stream(commands.Cog):
     )
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.default_permissions(administrator=True)
-    # Sélectionner le streamer à retirer dans la base de données en fonction de ceux actuellement dans la base de données
     async def stream_remove(self, interaction: discord.Interaction, streamer_name: str):
         """Retirer un streamer de la liste des streamers."""
-        if not streamer_name:
-            conn = database.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT streamerName FROM streamers")
-            streamers = cursor.fetchall()
-            conn.close()
-            if not streamers:
-                await interaction.response.send_message(
-                    "Aucun streamer n'est actuellement enregistré."
-                )
-                return
-            streamer_list = "\n".join([s[0] for s in streamers])
+        # Validation des entrées
+        if not streamer_name or not streamer_name.strip():
             await interaction.response.send_message(
-                f"Veuillez spécifier le nom du streamer à retirer. Ceux disponibles sont :\n{streamer_list}"
+                "❌ Le nom du streamer ne peut pas être vide.", ephemeral=True
             )
             return
-        # Logique pour retirer le streamer de la base de données
-        conn = database.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM streamers WHERE streamerName = ?", (streamer_name,))
-        conn.commit()
-        conn.close()
-        await interaction.response.send_message(f"Streamer retiré : {streamer_name}")
+        
+        streamer_name = streamer_name.strip().lower()
+        
+        try:
+            # Logique pour retirer le streamer de la base de données
+            conn = database.get_db_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM streamers WHERE streamerName = ?", (streamer_name,))
+                rows_deleted = cursor.rowcount
+                conn.commit()
+            finally:
+                conn.close()
+            
+            if rows_deleted > 0:
+                await interaction.response.send_message(
+                    f"✅ Streamer retiré : **{streamer_name}**"
+                )
+            else:
+                await interaction.response.send_message(
+                    f"❌ Streamer non trouvé : **{streamer_name}**\nVérifiez l'orthographe du nom.",
+                    ephemeral=True
+                )
+        except Exception as e:
+            logger.error(f"Erreur lors de la suppression du streamer {streamer_name}: {e}")
+            await interaction.response.send_message(
+                f"❌ Erreur lors de la suppression du streamer: {str(e)}", ephemeral=True
+            )
 
 
 class GetTwitchOAuth:

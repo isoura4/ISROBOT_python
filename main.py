@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import logging
 import os
 from pathlib import Path
+import sqlite3
 
 import aiohttp
 import discord
@@ -14,6 +15,50 @@ import database
 
 # Chargement du fichier .env
 load_dotenv()
+
+
+def validate_environment_variables():
+    """Valide que toutes les variables d'environnement requises sont définies."""
+    required_vars = {
+        "app_id": "L'ID de l'application Discord est requis",
+        "secret_key": "Le token du bot Discord est requis",
+        "server_id": "L'ID du serveur Discord est requis",
+        "db_path": "Le chemin de la base de données est requis",
+    }
+    
+    missing_vars = []
+    invalid_vars = []
+    
+    for var_name, error_msg in required_vars.items():
+        value = os.getenv(var_name)
+        if not value:
+            missing_vars.append(f"  - {var_name}: {error_msg}")
+        elif var_name in ["app_id", "server_id"]:
+            # Valider que les IDs sont des nombres valides
+            try:
+                int_value = int(value)
+                if int_value <= 0:
+                    invalid_vars.append(f"  - {var_name}: Doit être un nombre positif")
+            except ValueError:
+                invalid_vars.append(f"  - {var_name}: Doit être un nombre valide")
+    
+    if missing_vars or invalid_vars:
+        error_message = "❌ Erreur de configuration:\n"
+        if missing_vars:
+            error_message += "\nVariables manquantes:\n" + "\n".join(missing_vars)
+        if invalid_vars:
+            error_message += "\nVariables invalides:\n" + "\n".join(invalid_vars)
+        error_message += "\n\nVeuillez vérifier votre fichier .env et vous assurer que toutes les variables requises sont définies correctement."
+        raise ValueError(error_message)
+
+
+# Valider les variables d'environnement au démarrage
+try:
+    validate_environment_variables()
+except ValueError as e:
+    print(str(e))
+    logger.error(f"Erreur de validation des variables d'environnement: {e}")
+    exit(1)
 
 # Récupération des variables d'environnement
 APP_ID = int(os.getenv("app_id", "0"))
@@ -55,8 +100,9 @@ class ISROBOT(commands.Bot):
         self._counter_locks: dict[tuple[str, str], asyncio.Lock] = {}
 
     async def setup_hook(self):
-        # Créer une session HTTP pour les requêtes API
-        self.session = aiohttp.ClientSession()
+        # Créer une session HTTP pour les requêtes API avec timeout
+        timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=15)
+        self.session = aiohttp.ClientSession(timeout=timeout)
 
         # Lancer le script database.py pour créer la base de données
         print("Initialisation de la base de données...")
@@ -247,11 +293,25 @@ class ISROBOT(commands.Bot):
                                         )
                                     finally:
                                         conn.close()
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                f"Timeout lors de la vérification du streamer {streamer[1]}"
+                            )
+                        except aiohttp.ClientError as e:
+                            logger.error(
+                                f"Erreur réseau lors de la vérification du streamer {streamer[1]}: {e}"
+                            )
                         except Exception as e:
                             logger.error(
                                 f"Erreur lors de la vérification du streamer {streamer[1]}: {e}"
                             )
 
+            except asyncio.TimeoutError:
+                logger.warning("Timeout global lors de la vérification des streams Twitch")
+            except aiohttp.ClientError as e:
+                logger.error(f"Erreur réseau lors de la vérification des streams: {e}")
+            except sqlite3.Error as e:
+                logger.error(f"Erreur de base de données lors de la vérification des streams: {e}")
             except Exception as e:
                 logger.error(f"Erreur lors de la vérification des streams: {e}")
 
@@ -669,17 +729,38 @@ class ISROBOT(commands.Bot):
                                     logger.error(
                                         f"Permission Discord refusée pour {channel_name} lors de l'annonce d'une vidéo/short: {e}"
                                     )
-
+                                except asyncio.TimeoutError:
+                                    logger.warning(
+                                        f"Timeout lors de la vérification des uploads pour {channel_name}"
+                                    )
+                                except aiohttp.ClientError as e:
+                                    logger.error(
+                                        f"Erreur réseau lors de la vérification des uploads pour {channel_name}: {e}"
+                                    )
                                 except Exception as e:
                                     logger.error(
                                         f"Erreur lors de la vérification des uploads pour {channel_name}: {e}"
                                     )
 
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                f"Timeout lors de la vérification de la chaîne {channel_data[2]}"
+                            )
+                        except aiohttp.ClientError as e:
+                            logger.error(
+                                f"Erreur réseau lors de la vérification de la chaîne {channel_data[2]}: {e}"
+                            )
                         except Exception as e:
                             logger.error(
                                 f"Erreur lors de la vérification de la chaîne {channel_data[2]}: {e}"
                             )
 
+            except asyncio.TimeoutError:
+                logger.warning("Timeout global lors de la vérification YouTube")
+            except aiohttp.ClientError as e:
+                logger.error(f"Erreur réseau lors de la vérification YouTube: {e}")
+            except sqlite3.Error as e:
+                logger.error(f"Erreur de base de données lors de la vérification YouTube: {e}")
             except Exception as e:
                 error_msg = str(e)
                 # Détecter les erreurs de quota
@@ -735,14 +816,20 @@ class ISROBOT(commands.Bot):
         guild_id = str(message.guild.id)
         channel_id = str(message.channel.id)
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT 1 FROM counter_game WHERE guildId = ? AND channelId = ?",
-            (guild_id, channel_id),
-        )
-        is_counter_channel = cursor.fetchone() is not None
-        conn.close()
+        try:
+            conn = get_db_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT 1 FROM counter_game WHERE guildId = ? AND channelId = ?",
+                    (guild_id, channel_id),
+                )
+                is_counter_channel = cursor.fetchone() is not None
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.error(f"Erreur lors de la vérification du salon de comptage: {e}")
+            return
 
         if not is_counter_channel:
             return
@@ -750,69 +837,82 @@ class ISROBOT(commands.Bot):
         # Only check if it's a digit before acquiring the lock
         if not (message.content.isdigit() and not str(message.content).isspace()):
             return
+        
+        # Validate the number is within reasonable bounds to prevent integer overflow
+        try:
+            number = int(message.content)
+            if number < 0 or number > 1000000:
+                return
+        except ValueError:
+            return
 
         # Acquire lock for this specific guild/channel to prevent race conditions
         lock = self._get_counter_lock(guild_id, channel_id)
         async with lock:
-            # Re-read the database state under the lock to get fresh values
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM counter_game WHERE guildId = ? AND channelId = ?",
-                (guild_id, channel_id),
-            )
-            result = cursor.fetchone()
-
-            if not result:
-                conn.close()
-                return
-
-            # Si le message est envoyé dans le salon du minijeux compteur
-            last_user_id = result["lastUserId"]
-            last_count = result["count"]
-            count = message.content
-
-            if str(message.author.id) == last_user_id:
-                await self.reset_counter_game(
-                    message,
-                    cursor,
-                    conn,
-                    "Vous ne pouvez pas compter deux fois de suite !",
-                )
-                return
-            if str(int(message.content)) == str(result["count"] + 1):
-                await message.add_reaction("✅")
-                # Mettre à jour le compteur
+            try:
+                # Re-read the database state under the lock to get fresh values
+                conn = get_db_connection()
+                cursor = conn.cursor()
                 cursor.execute(
-                    "UPDATE counter_game SET count = ?, lastUserId = ? WHERE guildId = ? AND channelId = ?",
-                    (
-                        count,
-                        str(message.author.id),
-                        guild_id,
-                        channel_id,
-                    ),
+                    "SELECT * FROM counter_game WHERE guildId = ? AND channelId = ?",
+                    (guild_id, channel_id),
                 )
-                conn.commit()
-                conn.close()
-                return
-            elif str(int(message.content)) == str(result["count"]):
-                await self.reset_counter_game(
-                    message,
-                    cursor,
-                    conn,
-                    f"Vous avez mis le même chiffre ! Le bon chiffre était {last_count + 1}",
-                )
-                return
-            else:
-                # Mauvais chiffre (ni count+1, ni count)
-                await self.reset_counter_game(
-                    message,
-                    cursor,
-                    conn,
-                    f"Mauvais chiffre ! Le bon chiffre était {last_count + 1}, "
-                    f"mais vous avez mis {message.content}.",
-                )
-                return
+                result = cursor.fetchone()
+
+                if not result:
+                    conn.close()
+                    return
+
+                # Si le message est envoyé dans le salon du minijeux compteur
+                last_user_id = result["lastUserId"]
+                last_count = result["count"]
+                count = message.content
+
+                if str(message.author.id) == last_user_id:
+                    await self.reset_counter_game(
+                        message,
+                        cursor,
+                        conn,
+                        "Vous ne pouvez pas compter deux fois de suite !",
+                    )
+                    return
+                if str(int(message.content)) == str(result["count"] + 1):
+                    await message.add_reaction("✅")
+                    # Mettre à jour le compteur
+                    cursor.execute(
+                        "UPDATE counter_game SET count = ?, lastUserId = ? WHERE guildId = ? AND channelId = ?",
+                        (
+                            count,
+                            str(message.author.id),
+                            guild_id,
+                            channel_id,
+                        ),
+                    )
+                    conn.commit()
+                    conn.close()
+                    return
+                elif str(int(message.content)) == str(result["count"]):
+                    await self.reset_counter_game(
+                        message,
+                        cursor,
+                        conn,
+                        f"Vous avez mis le même chiffre ! Le bon chiffre était {last_count + 1}",
+                    )
+                    return
+                else:
+                    # Mauvais chiffre (ni count+1, ni count)
+                    await self.reset_counter_game(
+                        message,
+                        cursor,
+                        conn,
+                        f"Mauvais chiffre ! Le bon chiffre était {last_count + 1}, "
+                        f"mais vous avez mis {message.content}.",
+                    )
+                    return
+            except Exception as e:
+                logger.error(f"Erreur lors du traitement du jeu de comptage: {e}")
+                if conn:
+                    conn.close()
 
     async def close(self):
         """Fermer proprement la session HTTP quand le bot se ferme."""

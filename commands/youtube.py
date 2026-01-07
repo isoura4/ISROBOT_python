@@ -43,7 +43,32 @@ class YouTube(commands.Cog):
         """Ajouter une chaîne YouTube à surveiller. Accepte un ID de chaîne ou un handle (ex: @nom_chaine)."""
         if not YOUTUBE_API_KEY:
             await interaction.response.send_message(
-                "La clé API YouTube n'est pas configurée."
+                "❌ La clé API YouTube n'est pas configurée.", ephemeral=True
+            )
+            return
+        
+        # Validation des entrées
+        if not channel_id or not channel_id.strip():
+            await interaction.response.send_message(
+                "❌ L'ID de la chaîne ou le handle ne peut pas être vide.", ephemeral=True
+            )
+            return
+        
+        channel_id = channel_id.strip()
+        
+        # Valider le format de base du channel_id ou handle
+        if channel_id.startswith("@"):
+            # Valider le handle (doit commencer par @ et contenir des caractères valides)
+            if len(channel_id) < 2 or not channel_id[1:].replace("-", "").replace("_", "").replace(".", "").isalnum():
+                await interaction.response.send_message(
+                    "❌ Format de handle invalide. Exemple valide: @nom-de-chaine", ephemeral=True
+                )
+                return
+        elif not channel_id.startswith("UC") or len(channel_id) != 24:
+            # ID de chaîne YouTube devrait commencer par UC et avoir 24 caractères
+            await interaction.response.send_message(
+                "❌ Format d'ID de chaîne invalide. L'ID doit commencer par 'UC' et avoir 24 caractères, ou utilisez un handle (ex: @nom-de-chaine).", 
+                ephemeral=True
             )
             return
 
@@ -51,7 +76,8 @@ class YouTube(commands.Cog):
         actual_channel_id = None
         channel_name = None
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(total=30, connect=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 checker = CheckYouTubeChannel(session)
 
                 # Si l'entrée commence par @, c'est un handle

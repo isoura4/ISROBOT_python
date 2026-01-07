@@ -103,10 +103,20 @@ class AI(commands.Cog):
         await interaction.response.defer(thinking=True)
 
         try:
+            # Validation de base
+            if not question or not question.strip():
+                await interaction.followup.send(
+                    "❌ La question ne peut pas être vide.", ephemeral=True
+                )
+                return
+            
+            question = question.strip()
+            
             # Limiter la longueur de la question pour éviter les abus
             if len(question) > 500:
                 await interaction.followup.send(
-                    "❌ Votre question est trop longue. Veuillez la limiter à 500 caractères."
+                    "❌ Votre question est trop longue. Veuillez la limiter à 500 caractères.", 
+                    ephemeral=True
                 )
                 return
 
@@ -146,13 +156,40 @@ class AI(commands.Cog):
                             },
                         ],
                     )
+                    # Valider la structure de la réponse
+                    if not response or "message" not in response or "content" not in response["message"]:
+                        return None
                     return response["message"]["content"]
+                except ConnectionError as e:
+                    return f"❌ Impossible de se connecter au serveur IA. Vérifiez que Ollama est en cours d'exécution."
+                except TimeoutError:
+                    return f"❌ Le serveur IA a mis trop de temps à répondre. Réessayez plus tard."
                 except Exception as e:
-                    return f"Erreur lors de la communication avec l'IA: {str(e)}"
+                    return f"❌ Erreur lors de la communication avec l'IA: {str(e)}"
 
             # Exécuter dans un thread pour ne pas bloquer l'event loop
             loop = asyncio.get_event_loop()
             ai_response = await loop.run_in_executor(None, get_ai_response)
+            
+            # Vérifier si la réponse est valide
+            if ai_response is None:
+                error_embed = discord.Embed(
+                    title="❌ Erreur",
+                    description="La réponse de l'IA est invalide ou vide.",
+                    color=discord.Color.red(),
+                )
+                await interaction.followup.send(embed=error_embed, ephemeral=True)
+                return
+            
+            # Vérifier si c'est un message d'erreur
+            if ai_response.startswith("❌"):
+                error_embed = discord.Embed(
+                    title="❌ Erreur",
+                    description=ai_response,
+                    color=discord.Color.red(),
+                )
+                await interaction.followup.send(embed=error_embed, ephemeral=True)
+                return
 
             # Vérifier si la réponse de l'IA contient du contenu inapproprié
             if self.contains_inappropriate_content(ai_response):
