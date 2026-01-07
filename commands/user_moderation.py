@@ -5,7 +5,7 @@ Allows users to appeal warnings.
 
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import discord
 from discord import app_commands

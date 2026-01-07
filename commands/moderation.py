@@ -309,7 +309,6 @@ class Moderation(commands.Cog):
                 return
 
             guild_id = str(interaction.guild.id)
-            user_id = str(user.id)
             moderator_id = str(interaction.user.id)
 
             # Apply mute

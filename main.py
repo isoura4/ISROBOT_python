@@ -112,6 +112,21 @@ class ISROBOT(commands.Bot):
         # limited to one per guild, so memory impact is minimal
         self._counter_locks: dict[tuple[str, str], asyncio.Lock] = {}
 
+    def _get_counter_lock(self, guild_id: str, channel_id: str) -> asyncio.Lock:
+        """Get or create a lock for a specific counter game channel.
+
+        Args:
+            guild_id: The guild ID
+            channel_id: The channel ID
+
+        Returns:
+            An asyncio.Lock for this guild/channel combination
+        """
+        key = (guild_id, channel_id)
+        if key not in self._counter_locks:
+            self._counter_locks[key] = asyncio.Lock()
+        return self._counter_locks[key]
+
     async def setup_hook(self):
         # Créer une session HTTP pour les requêtes API avec timeout
         timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=15)
@@ -789,8 +804,8 @@ class ISROBOT(commands.Bot):
                         f"Le quota se réinitialise à minuit PST. Erreur: {e}"
                     )
                     print(
-                        f"❌ [YouTube] Quota API dépassé! "
-                        f"Prochaine tentative dans 30 minutes."
+                        "❌ [YouTube] Quota API dépassé! "
+                        "Prochaine tentative dans 30 minutes."
                     )
                 else:
                     logger.error(f"Erreur lors de la vérification YouTube: {e}")
@@ -908,7 +923,6 @@ class ISROBOT(commands.Bot):
                     try:
                         guild_id = mute["guild_id"]
                         user_id = mute["user_id"]
-                        reason = mute["reason"]
 
                         guild = self.get_guild(int(guild_id))
                         if not guild:
