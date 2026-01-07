@@ -132,21 +132,27 @@ class XPSystem(commands.Cog):
         try:
             result = self.add_user_xp(guild_id, user_id, xp_gain)
 
-            # Si l'utilisateur a level up, envoyer un message priver a l'utilisateur
+            # Si l'utilisateur a level up, envoyer un message privé à l'utilisateur
             if result["level_up"]:
-                embed = discord.Embed(
-                    title="🎉 Level Up !",
-                    description=f"Vous avez atteint le niveau **{result['new_level']}** !",
-                    color=discord.Color.gold(),
-                )
-                embed.add_field(
-                    name="XP Total", value=f"{result['new_xp']} XP", inline=True
-                )
-                embed.add_field(
-                    name="Messages", value=f"{result['messages']} messages", inline=True
-                )
+                try:
+                    embed = discord.Embed(
+                        title="🎉 Level Up !",
+                        description=f"Vous avez atteint le niveau **{result['new_level']}** !",
+                        color=discord.Color.gold(),
+                    )
+                    embed.add_field(
+                        name="XP Total", value=f"{result['new_xp']} XP", inline=True
+                    )
+                    embed.add_field(
+                        name="Messages", value=f"{result['messages']} messages", inline=True
+                    )
 
-                await message.author.send(embed=embed, silent=True)
+                    await message.author.send(embed=embed, silent=True)
+                except discord.errors.Forbidden:
+                    # L'utilisateur a désactivé les MP ou a bloqué le bot
+                    pass
+                except Exception as e:
+                    print(f"Erreur lors de l'envoi du message de level up à {message.author}: {e}")
 
         except Exception as e:
             print(f"Erreur lors de l'ajout d'XP pour {message.author}: {e}")

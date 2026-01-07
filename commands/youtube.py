@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from typing import Optional
 
 import aiohttp
@@ -19,6 +20,34 @@ YOUTUBE_API_KEY = os.getenv("youtube_api_key")
 
 # Logger pour ce module
 logger = logging.getLogger(__name__)
+
+
+def validate_youtube_identifier(identifier: str) -> tuple[bool, str]:
+    """
+    Valide un identifiant YouTube (handle ou channel ID).
+    
+    Args:
+        identifier: L'identifiant à valider (handle ou channel ID)
+        
+    Returns:
+        tuple: (is_valid, error_message) - is_valid est True si valide, error_message contient le message d'erreur si invalide
+    """
+    if identifier.startswith("@"):
+        # Valider le handle: doit commencer par @ et contenir uniquement des caractères alphanumériques, tirets, underscores, points
+        # Les handles YouTube peuvent contenir des lettres, chiffres, tirets, underscores et points
+        if len(identifier) < 2:
+            return False, "❌ Format de handle invalide. Le handle est trop court."
+        
+        handle_part = identifier[1:]
+        # Regex pour valider: lettres, chiffres, tirets, underscores, points
+        if not re.match(r'^[a-zA-Z0-9._-]+$', handle_part):
+            return False, "❌ Format de handle invalide. Exemple valide: @nom-de-chaine"
+    else:
+        # Valider l'ID de chaîne: doit commencer par UC et avoir exactement 24 caractères
+        if not identifier.startswith("UC") or len(identifier) != 24:
+            return False, "❌ Format d'ID de chaîne invalide. L'ID doit commencer par 'UC' et avoir 24 caractères, ou utilisez un handle (ex: @nom-de-chaine)."
+    
+    return True, ""
 
 
 class YouTube(commands.Cog):
@@ -43,15 +72,31 @@ class YouTube(commands.Cog):
         """Ajouter une chaîne YouTube à surveiller. Accepte un ID de chaîne ou un handle (ex: @nom_chaine)."""
         if not YOUTUBE_API_KEY:
             await interaction.response.send_message(
-                "La clé API YouTube n'est pas configurée."
+                "❌ La clé API YouTube n'est pas configurée.", ephemeral=True
             )
+            return
+        
+        # Validation des entrées
+        if not channel_id or not channel_id.strip():
+            await interaction.response.send_message(
+                "❌ L'ID de la chaîne ou le handle ne peut pas être vide.", ephemeral=True
+            )
+            return
+        
+        channel_id = channel_id.strip()
+        
+        # Valider le format de base du channel_id ou handle
+        is_valid, error_msg = validate_youtube_identifier(channel_id)
+        if not is_valid:
+            await interaction.response.send_message(error_msg, ephemeral=True)
             return
 
         # Vérifier si le channel_id est valide ou si c'est un handle
         actual_channel_id = None
         channel_name = None
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(total=30, connect=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 checker = CheckYouTubeChannel(session)
 
                 # Si l'entrée commence par @, c'est un handle
