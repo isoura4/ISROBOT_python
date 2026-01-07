@@ -182,8 +182,8 @@ class GetTwitchOAuth:
         self.client_secret = TWITCH_CLIENT_SECRET
         self.session = session
 
-    async def get_auth_token(self):
-        """Obtenir un token d'authentification pour l'API Twitch."""
+    async def get_auth_token(self, retry_count: int = 3):
+        """Obtenir un token d'authentification pour l'API Twitch avec retry."""
         if not self.client_id or not self.client_secret:
             raise ValueError("Les identifiants Twitch ne sont pas configurés.")
 
@@ -193,13 +193,33 @@ class GetTwitchOAuth:
             "client_secret": self.client_secret,
             "grant_type": "client_credentials",
         }
-        async with self.session.post(urlOAuth, params=params) as response:
-            if response.status != 200:
-                raise Exception(
-                    f"Erreur lors de la récupération du token OAuth: {response.status}"
-                )
-            data = await response.json()
-            return data["access_token"]
+        
+        last_error = None
+        for attempt in range(retry_count):
+            try:
+                async with self.session.post(urlOAuth, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data["access_token"]
+                    elif response.status >= 500:
+                        # Erreur serveur, réessayer
+                        last_error = f"Erreur serveur Twitch: {response.status}"
+                        if attempt < retry_count - 1:
+                            await asyncio.sleep(2 ** attempt)  # Backoff exponentiel
+                            continue
+                    else:
+                        # Erreur client (4xx), ne pas réessayer
+                        raise Exception(
+                            f"Erreur lors de la récupération du token OAuth: {response.status}"
+                        )
+            except (asyncio.TimeoutError, aiohttp.ClientError) as e:
+                last_error = str(e)
+                if attempt < retry_count - 1:
+                    logger.warning(f"Tentative {attempt + 1}/{retry_count} échouée pour l'authentification Twitch: {e}")
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                    
+        raise Exception(f"Échec de l'authentification Twitch après {retry_count} tentatives: {last_error}")
 
 
 class StartStreamCheckInterval:
@@ -231,19 +251,39 @@ class CheckTwitchStatus:
         self.session = session
         self.oauth = GetTwitchOAuth(session)
 
-    async def check_streamer_status(self, streamer_name: str):
-        """Vérifier si un streamer est en ligne."""
-        token = await self.oauth.get_auth_token()
-        headers = {"Client-ID": TWITCH_CLIENT_ID, "Authorization": f"Bearer {token}"}
-        url = f"https://api.twitch.tv/helix/streams?user_login={streamer_name}"
+    async def check_streamer_status(self, streamer_name: str, retry_count: int = 3):
+        """Vérifier si un streamer est en ligne avec retry."""
+        last_error = None
+        
+        for attempt in range(retry_count):
+            try:
+                token = await self.oauth.get_auth_token()
+                headers = {"Client-ID": TWITCH_CLIENT_ID, "Authorization": f"Bearer {token}"}
+                url = f"https://api.twitch.tv/helix/streams?user_login={streamer_name}"
 
-        async with self.session.get(url, headers=headers) as response:
-            if response.status != 200:
-                raise Exception(
-                    f"Erreur lors de la vérification du statut du streamer: {response.status}"
-                )
-            data = await response.json()
-            return data["data"]
+                async with self.session.get(url, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data.get("data", [])
+                    elif response.status >= 500:
+                        # Erreur serveur, réessayer
+                        last_error = f"Erreur serveur Twitch: {response.status}"
+                        if attempt < retry_count - 1:
+                            await asyncio.sleep(2 ** attempt)
+                            continue
+                    else:
+                        # Erreur client, ne pas réessayer
+                        raise Exception(
+                            f"Erreur lors de la vérification du statut du streamer: {response.status}"
+                        )
+            except (asyncio.TimeoutError, aiohttp.ClientError) as e:
+                last_error = str(e)
+                if attempt < retry_count - 1:
+                    logger.warning(f"Tentative {attempt + 1}/{retry_count} échouée pour {streamer_name}: {e}")
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+        
+        raise Exception(f"Échec de la vérification du streamer {streamer_name} après {retry_count} tentatives: {last_error}")
 
 
 class AnnounceStream:

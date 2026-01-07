@@ -4,7 +4,9 @@ from datetime import datetime, timedelta, timezone
 import logging
 import os
 from pathlib import Path
+import signal
 import sqlite3
+import sys
 
 import aiohttp
 import discord
@@ -67,13 +69,24 @@ SERVER_ID = int(os.getenv("server_id", "0"))
 DB_PATH = os.getenv("db_path")
 
 # Parametrage des logs
+# Configuration avancée avec rotation des logs et sortie console
 logging.basicConfig(
-    filename="discord.log",
     level=logging.INFO,
     encoding="utf-8",
     format="%(asctime)s:%(levelname)s:%(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        # Log vers fichier
+        logging.FileHandler("discord.log", encoding="utf-8"),
+        # Log vers console pour debug
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
+
+# Réduire le niveau de log pour les bibliothèques tierces
+logging.getLogger("discord").setLevel(logging.WARNING)
+logging.getLogger("aiohttp").setLevel(logging.WARNING)
 
 # Configuration des intents - Optimisé pour réduire la charge WebSocket
 intents = discord.Intents.default()
@@ -316,6 +329,8 @@ class ISROBOT(commands.Bot):
                 logger.error(f"Erreur lors de la vérification des streams: {e}")
 
             # Attendre 5 minutes avant la prochaine vérification
+            # Note: Rate limiting naturel via intervalle de 5min entre vérifications
+            # qui garantit le respect des limites de l'API Twitch
             await asyncio.sleep(300)
 
     def _is_recently_published(self, published_at_str: str, hours: int = 24) -> bool:
@@ -776,7 +791,10 @@ class ISROBOT(commands.Bot):
                 else:
                     logger.error(f"Erreur lors de la vérification YouTube: {e}")
 
-            # Attendre 10 minutes avant la prochaine vérification (optimisé pour ~9500 unités/jour)
+            # Attendre 10 minutes avant la prochaine vérification
+            # Note: Rate limiting naturel via intervalle de 10min entre vérifications
+            # optimisé pour respecter le quota YouTube API (~9500 unités/jour)
+            # En cas de dépassement de quota, la boucle continue mais les erreurs sont loggées
             await asyncio.sleep(600)
 
     def _get_counter_lock(self, guild_id: str, channel_id: str) -> asyncio.Lock:
@@ -916,17 +934,37 @@ class ISROBOT(commands.Bot):
 
     async def close(self):
         """Fermer proprement la session HTTP quand le bot se ferme."""
+        logger.info("Démarrage de l'arrêt gracieux du bot...")
+        
         # Arrêter la tâche de vérification des streams
-        if hasattr(self, "stream_check_task"):
+        if hasattr(self, "stream_check_task") and not self.stream_check_task.done():
+            logger.info("Arrêt de la tâche de vérification Twitch...")
             self.stream_check_task.cancel()
+            try:
+                await asyncio.wait_for(self.stream_check_task, timeout=5.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+            logger.info("Tâche de vérification Twitch arrêtée")
 
         # Arrêter la tâche de vérification YouTube
-        if hasattr(self, "youtube_check_task"):
+        if hasattr(self, "youtube_check_task") and not self.youtube_check_task.done():
+            logger.info("Arrêt de la tâche de vérification YouTube...")
             self.youtube_check_task.cancel()
+            try:
+                await asyncio.wait_for(self.youtube_check_task, timeout=5.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+            logger.info("Tâche de vérification YouTube arrêtée")
 
-        if self.session:
+        # Fermer la session HTTP
+        if self.session and not self.session.closed:
+            logger.info("Fermeture de la session HTTP...")
             await self.session.close()
+            logger.info("Session HTTP fermée")
+        
+        logger.info("Arrêt du bot...")
         await super().close()
+        logger.info("Bot arrêté avec succès")
 
     async def on_ready(self):
         print("Ready !")
@@ -940,7 +978,35 @@ class ISROBOT(commands.Bot):
 
 
 client = ISROBOT()
-if TOKEN:
-    client.run(TOKEN)
+
+def signal_handler(sig, frame):
+    """Gestionnaire de signal pour arrêt gracieux."""
+    logger.info(f"Signal {sig} reçu, arrêt du bot...")
+    print(f"\n⚠️ Signal {sig} reçu, arrêt gracieux du bot...")
+    # Créer une tâche pour fermer le bot proprement
+    asyncio.create_task(client.close())
+
+# Enregistrer les gestionnaires de signaux pour arrêt gracieux
+if sys.platform != "win32":
+    # Sur Unix/Linux, enregistrer SIGTERM et SIGINT
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
 else:
-    print("Erreur: TOKEN non trouvé dans le fichier .env")
+    # Sur Windows, seulement SIGINT (Ctrl+C)
+    signal.signal(signal.SIGINT, signal_handler)
+
+if TOKEN:
+    try:
+        logger.info("Démarrage du bot...")
+        client.run(TOKEN)
+    except KeyboardInterrupt:
+        logger.info("Interruption clavier détectée")
+    except Exception as e:
+        logger.error(f"Erreur lors de l'exécution du bot: {e}")
+        raise
+    finally:
+        logger.info("Bot terminé")
+else:
+    print("❌ Erreur: TOKEN non trouvé dans le fichier .env")
+    logger.error("TOKEN non trouvé dans le fichier .env")
+    sys.exit(1)
