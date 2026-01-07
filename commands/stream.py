@@ -49,10 +49,11 @@ class Stream(commands.Cog):
         # Nettoyer le nom du streamer (enlever les espaces et convertir en minuscules)
         streamer_name = streamer_name.strip().lower()
         
-        # Valider que le nom ne contient que des caractères alphanumériques et underscores
-        if not streamer_name.replace("_", "").isalnum():
+        # Valider que le nom respecte les règles Twitch (4-25 caractères, alphanumériques, underscores et tirets)
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]{4,25}$', streamer_name):
             await interaction.response.send_message(
-                "❌ Le nom du streamer ne peut contenir que des lettres, chiffres et underscores.", 
+                "❌ Le nom du streamer est invalide. Les noms Twitch doivent contenir 4-25 caractères (lettres, chiffres, underscores, tirets).", 
                 ephemeral=True
             )
             return

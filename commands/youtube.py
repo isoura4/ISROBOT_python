@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from typing import Optional
 
 import aiohttp
@@ -31,8 +32,6 @@ def validate_youtube_identifier(identifier: str) -> tuple[bool, str]:
     Returns:
         tuple: (is_valid, error_message) - is_valid est True si valide, error_message contient le message d'erreur si invalide
     """
-    import re
-    
     if identifier.startswith("@"):
         # Valider le handle: doit commencer par @ et contenir uniquement des caractères alphanumériques, tirets, underscores, points
         # Les handles YouTube peuvent contenir des lettres, chiffres, tirets, underscores et points

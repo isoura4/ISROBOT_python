@@ -161,10 +161,13 @@ class AI(commands.Cog):
                         return None
                     return response["message"]["content"]
                 except ConnectionError as e:
+                    logger.warning(f"Erreur de connexion Ollama: {e}")
                     return f"❌ Impossible de se connecter au serveur IA. Vérifiez que Ollama est en cours d'exécution."
-                except TimeoutError:
+                except TimeoutError as e:
+                    logger.warning(f"Timeout Ollama: {e}")
                     return f"❌ Le serveur IA a mis trop de temps à répondre. Réessayez plus tard."
                 except Exception as e:
+                    logger.error(f"Erreur Ollama: {e}")
                     return f"❌ Erreur lors de la communication avec l'IA: {str(e)}"
 
             # Exécuter dans un thread pour ne pas bloquer l'event loop

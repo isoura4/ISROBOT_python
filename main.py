@@ -80,7 +80,7 @@ try:
 except ValueError as e:
     print(str(e))
     logger.error(f"Erreur de validation des variables d'environnement: {e}")
-    exit(1)
+    sys.exit(1)
 
 # Récupération des variables d'environnement
 APP_ID = int(os.getenv("app_id", "0"))
@@ -867,6 +867,7 @@ class ISROBOT(commands.Bot):
         # Acquire lock for this specific guild/channel to prevent race conditions
         lock = self._get_counter_lock(guild_id, channel_id)
         async with lock:
+            conn = None
             try:
                 # Re-read the database state under the lock to get fresh values
                 conn = get_db_connection()
