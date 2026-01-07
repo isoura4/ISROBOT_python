@@ -26,8 +26,7 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 ### 📺 YouTube Integration
 - **Video Notifications**: Automatically announce when a channel uploads a new video
 - **Short Notifications**: Notify when a channel posts a new YouTube Short
-- **Live Stream Notifications**: Alert when a channel starts a live stream
-- **Flexible Configuration**: Choose which types of content to monitor (videos, shorts, lives)
+- **Flexible Configuration**: Choose which types of content to monitor (videos, shorts)
 - **Handle Support**: Add channels using either their channel ID or @handle (e.g., @el-dorado-community)
 - **Rich Embeds**: Beautiful announcements with thumbnails and video details
 
@@ -149,7 +148,7 @@ ISROBOT_python/
 - `/count <channel>` - Set up the counter mini-game in a specific channel
 - `/stream_add <streamer_name> <channel>` - Add a streamer to the notification list
 - `/stream_remove <streamer_name>` - Remove a streamer from the notification list
-- `/youtube_add <channel_id_or_handle> <channel> [notify_videos] [notify_shorts] [notify_live] [ping_role]` - Add a YouTube channel to monitor (accepts channel ID or @handle)
+- `/youtube_add <channel_id_or_handle> <channel> [notify_videos] [notify_shorts] [ping_role]` - Add a YouTube channel to monitor (accepts channel ID or @handle)
 - `/youtube_remove <channel_name>` - Remove a YouTube channel from monitoring
 - `/reload` - Reload all bot extensions
 
@@ -188,8 +187,8 @@ The bot uses SQLite with the following tables:
 
 ### YouTube Channels Table
 - Manages YouTube channels for notifications
-- Tracks last video/short/live IDs to prevent duplicates
-- Configurable notification types (videos, shorts, lives)
+- Tracks last video/short IDs to prevent duplicates
+- Configurable notification types (videos, shorts)
 
 ### Counter Game Table
 - Stores counter game configuration per server
