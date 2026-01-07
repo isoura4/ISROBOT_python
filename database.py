@@ -28,11 +28,15 @@ def get_db_connection():
             "dans les variables d'environnement."
         )
     
+    conn = None
     try:
         conn = sqlite3.connect(DB_PATH, timeout=10.0)
         conn.row_factory = sqlite3.Row  # Permet d'accéder aux colonnes par nom
         return conn
     except sqlite3.Error as e:
+        # Fermer la connexion si elle a été créée mais que la configuration a échoué
+        if conn:
+            conn.close()
         raise RuntimeError(f"Impossible de se connecter à la base de données {DB_PATH}: {e}")
 
 

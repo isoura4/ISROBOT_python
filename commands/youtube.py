@@ -21,6 +21,36 @@ YOUTUBE_API_KEY = os.getenv("youtube_api_key")
 logger = logging.getLogger(__name__)
 
 
+def validate_youtube_identifier(identifier: str) -> tuple[bool, str]:
+    """
+    Valide un identifiant YouTube (handle ou channel ID).
+    
+    Args:
+        identifier: L'identifiant à valider (handle ou channel ID)
+        
+    Returns:
+        tuple: (is_valid, error_message) - is_valid est True si valide, error_message contient le message d'erreur si invalide
+    """
+    import re
+    
+    if identifier.startswith("@"):
+        # Valider le handle: doit commencer par @ et contenir uniquement des caractères alphanumériques, tirets, underscores, points
+        # Les handles YouTube peuvent contenir des lettres, chiffres, tirets, underscores et points
+        if len(identifier) < 2:
+            return False, "❌ Format de handle invalide. Le handle est trop court."
+        
+        handle_part = identifier[1:]
+        # Regex pour valider: lettres, chiffres, tirets, underscores, points
+        if not re.match(r'^[a-zA-Z0-9._-]+$', handle_part):
+            return False, "❌ Format de handle invalide. Exemple valide: @nom-de-chaine"
+    else:
+        # Valider l'ID de chaîne: doit commencer par UC et avoir exactement 24 caractères
+        if not identifier.startswith("UC") or len(identifier) != 24:
+            return False, "❌ Format d'ID de chaîne invalide. L'ID doit commencer par 'UC' et avoir 24 caractères, ou utilisez un handle (ex: @nom-de-chaine)."
+    
+    return True, ""
+
+
 class YouTube(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -57,19 +87,9 @@ class YouTube(commands.Cog):
         channel_id = channel_id.strip()
         
         # Valider le format de base du channel_id ou handle
-        if channel_id.startswith("@"):
-            # Valider le handle (doit commencer par @ et contenir des caractères valides)
-            if len(channel_id) < 2 or not channel_id[1:].replace("-", "").replace("_", "").replace(".", "").isalnum():
-                await interaction.response.send_message(
-                    "❌ Format de handle invalide. Exemple valide: @nom-de-chaine", ephemeral=True
-                )
-                return
-        elif not channel_id.startswith("UC") or len(channel_id) != 24:
-            # ID de chaîne YouTube devrait commencer par UC et avoir 24 caractères
-            await interaction.response.send_message(
-                "❌ Format d'ID de chaîne invalide. L'ID doit commencer par 'UC' et avoir 24 caractères, ou utilisez un handle (ex: @nom-de-chaine).", 
-                ephemeral=True
-            )
+        is_valid, error_msg = validate_youtube_identifier(channel_id)
+        if not is_valid:
+            await interaction.response.send_message(error_msg, ephemeral=True)
             return
 
         # Vérifier si le channel_id est valide ou si c'est un handle

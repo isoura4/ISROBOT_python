@@ -18,6 +18,26 @@ import database
 # Chargement du fichier .env
 load_dotenv()
 
+# Parametrage des logs - Faire ceci en premier
+# Configuration avancée avec rotation des logs et sortie console
+logging.basicConfig(
+    level=logging.INFO,
+    encoding="utf-8",
+    format="%(asctime)s:%(levelname)s:%(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        # Log vers fichier
+        logging.FileHandler("discord.log", encoding="utf-8"),
+        # Log vers console pour debug
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Réduire le niveau de log pour les bibliothèques tierces
+logging.getLogger("discord").setLevel(logging.WARNING)
+logging.getLogger("aiohttp").setLevel(logging.WARNING)
+
 
 def validate_environment_variables():
     """Valide que toutes les variables d'environnement requises sont définies."""
@@ -67,26 +87,6 @@ APP_ID = int(os.getenv("app_id", "0"))
 TOKEN = os.getenv("secret_key")
 SERVER_ID = int(os.getenv("server_id", "0"))
 DB_PATH = os.getenv("db_path")
-
-# Parametrage des logs
-# Configuration avancée avec rotation des logs et sortie console
-logging.basicConfig(
-    level=logging.INFO,
-    encoding="utf-8",
-    format="%(asctime)s:%(levelname)s:%(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        # Log vers fichier
-        logging.FileHandler("discord.log", encoding="utf-8"),
-        # Log vers console pour debug
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-
-# Réduire le niveau de log pour les bibliothèques tierces
-logging.getLogger("discord").setLevel(logging.WARNING)
-logging.getLogger("aiohttp").setLevel(logging.WARNING)
 
 # Configuration des intents - Optimisé pour réduire la charge WebSocket
 intents = discord.Intents.default()
@@ -983,8 +983,14 @@ def signal_handler(sig, frame):
     """Gestionnaire de signal pour arrêt gracieux."""
     logger.info(f"Signal {sig} reçu, arrêt du bot...")
     print(f"\n⚠️ Signal {sig} reçu, arrêt gracieux du bot...")
-    # Créer une tâche pour fermer le bot proprement
-    asyncio.create_task(client.close())
+    # Utiliser le loop pour planifier la fermeture du bot
+    # au lieu de créer une tâche directement depuis le signal handler
+    loop = client.loop
+    if loop and loop.is_running():
+        loop.create_task(client.close())
+    else:
+        # Si le loop n'est pas en cours, forcer l'arrêt
+        sys.exit(0)
 
 # Enregistrer les gestionnaires de signaux pour arrêt gracieux
 if sys.platform != "win32":
