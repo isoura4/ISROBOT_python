@@ -35,6 +35,21 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 - **Configuration Commands**: Set up mini-games and stream notifications
 - **Permissions**: Admin-only commands for server management
 
+### 🛡️ Moderation System (NEW)
+- **Smart Warning System**: Issue warnings with automatic escalation
+  - Intelligent warning decay based on warn count
+  - Automatic muting at 2 and 3 warnings
+  - Manual moderator intervention at 4+ warnings
+- **Mute Management**: Temporary mutes with automatic expiration
+- **User Appeals**: Allow users to appeal warnings with review system
+- **AI-Assisted Moderation**: Ollama-powered message flagging
+  - Automatic detection of toxicity, spam, NSFW, harassment
+  - Moderators make all final decisions
+  - Conservative threshold to avoid false positives
+- **Comprehensive Audit Trail**: Immutable logging of all actions
+- **Context Menu Integration**: Right-click messages to warn users
+- **Flexible Configuration**: Per-guild customization of all settings
+
 ### 🏓 Utility Commands
 - **Ping**: Simple response command
 - **Bot Ping**: Check bot latency and connection status
@@ -96,18 +111,24 @@ ISROBOT_python/
 ├── .env                    # Environment variables (create this)
 ├── database.sqlite3        # SQLite database (auto-created)
 ├── discord.log             # Bot logs (auto-created)
-└── commands/               # Bot command modules
-    ├── ai.py               # AI chat integration with Ollama
-    ├── coinflip.py         # Coin flip command
-    ├── count.py            # Counter game setup
-    ├── music.py            # Music playback functionality
-    ├── ping.py             # Basic ping command
-    ├── ping_bot.py         # Bot latency command
-    ├── reload.py           # Hot-reload extensions
-    ├── stream.py           # Twitch stream integration
-    ├── xp_system.py        # XP and leveling system
-    ├── xp_voice.py         # Voice XP tracking
-    └── youtube.py          # YouTube channel integration
+├── commands/               # Bot command modules
+│   ├── ai.py               # AI chat integration with Ollama
+│   ├── coinflip.py         # Coin flip command
+│   ├── count.py            # Counter game setup
+│   ├── moderation.py       # Moderation commands (warn, mute, etc.)
+│   ├── moderation_config.py # Moderation configuration commands
+│   ├── moderation_context.py # Context menu for warnings
+│   ├── user_moderation.py  # User appeal commands
+│   ├── ping.py             # Basic ping command
+│   ├── ping_bot.py         # Bot latency command
+│   ├── reload.py           # Hot-reload extensions
+│   ├── stream.py           # Twitch stream integration
+│   ├── xp_system.py        # XP and leveling system
+│   ├── xp_voice.py         # Voice XP tracking
+│   └── youtube.py          # YouTube channel integration
+└── utils/                  # Utility modules
+    ├── ai_moderation.py    # AI message analysis with Ollama
+    └── moderation_utils.py # Moderation helper functions
 ```
 
 ## Commands
@@ -131,6 +152,27 @@ ISROBOT_python/
 - `/youtube_remove <channel_name>` - Remove a YouTube channel from monitoring
 - `/reload` - Reload all bot extensions
 
+### Moderation Commands (Moderator+)
+- `/warn <user> <reason>` - Issue a warning to a user
+- `/warns <user>` - View warning history for a user
+- `/unwarn <user> [reason]` - Remove a warning from a user
+- `/mute <user> <duration> <reason>` - Temporarily mute a user (e.g., 1h, 30m, 1d)
+- `/unmute <user>` - Remove an active mute
+- `/modlog [user]` - View moderation logs (server-wide or for specific user)
+- **Context Menu**: Right-click message → Apps → "Warn User"
+
+### Moderation Configuration (Administrator Only)
+- `/modconfig view` - Display current moderation configuration
+- `/modconfig set <parameter> <value>` - Configure moderation settings
+  - **Channels**: `log_channel`, `appeal_channel`, `ai_flag_channel`
+  - **AI Settings**: `ai_enabled`, `ai_confidence_threshold`, `ai_model`, `ollama_host`
+  - **Warning Decay**: `warn_1_decay_days`, `warn_2_decay_days`, `warn_3_decay_days`
+  - **Mute Durations**: `mute_duration_2`, `mute_duration_3`
+  - **Rules**: `rules_message_id`
+
+### User Commands
+- `/appeal <reason>` - Submit an appeal against your warnings (48h cooldown)
+
 ## Database Schema
 
 The bot uses SQLite with the following tables:
@@ -152,6 +194,14 @@ The bot uses SQLite with the following tables:
 - Stores counter game configuration per server
 - Tracks current count and last user
 
+### Moderation Tables (NEW)
+- **Warnings**: Current warning count per user per guild
+- **Warning History**: Immutable audit trail of all moderation actions
+- **Moderation Appeals**: User appeal submissions and moderator decisions
+- **Moderation Config**: Per-guild configuration for moderation system
+- **AI Flags**: Messages flagged by AI for moderator review
+- **Active Mutes**: Current mutes with expiration timestamps
+
 ## Configuration
 
 ### Bot Permissions Required
@@ -160,6 +210,8 @@ The bot uses SQLite with the following tables:
 - Embed Links
 - Add Reactions
 - Read Message History
+- Manage Messages (for context menu message deletion)
+- Moderate Members (for timeout/mute feature)
 - Connect (for voice channels)
 - Speak (for voice channels)
 
@@ -216,6 +268,142 @@ Users must count sequentially starting from 1. Rules:
   - System prompts to guide AI behavior
   - Output filtering to block inappropriate responses
   - Compliance with server rules and community guidelines
+
+## Moderation System
+
+The comprehensive moderation system provides advanced tools for server management with AI assistance.
+
+### Warning System
+
+**Escalation Levels:**
+1. **First Warning**: User receives DM notification
+2. **Second Warning**: Automatic 1-hour mute + DM notification
+3. **Third Warning**: Automatic 24-hour mute + DM notification
+4. **Fourth+ Warning**: No automatic action - moderator must decide manually
+
+**Intelligent Warning Decay:**
+- Warnings automatically expire based on warn count
+- Higher warn counts = longer decay periods
+- **1 warning**: Expires after 7 days
+- **2 warnings**: Expires after 14 days
+- **3 warnings**: Expires after 21 days
+- **4+ warnings**: Expires after 28 days
+- When warn count reaches 0, active mute is automatically removed
+- All decay events are logged and users receive DM notifications
+
+### Mute System
+
+**Features:**
+- Uses Discord's native timeout feature
+- Automatic expiration tracking
+- Manual mute/unmute commands
+- Automatic removal when warnings reach 0
+- DM notifications for mute applied/expired
+
+**Duration Format:**
+- Examples: `1h` (1 hour), `30m` (30 minutes), `1d` (1 day), `2h30m` (2 hours 30 minutes)
+
+### Appeal System
+
+**User Perspective:**
+- Users can appeal warnings using `/appeal <reason>`
+- 48-hour cooldown between appeals
+- Maximum 1000 characters for appeal reason
+- Appeal status notifications via DM
+- Cannot view own warning count (prevents gaming the system)
+
+**Moderator Perspective:**
+- Appeals posted to configured appeal channel
+- View user's warning history with appeal
+- Approve or deny with custom decision message
+- Approved appeals automatically remove 1 warning
+- All decisions logged and DMed to user
+
+### AI-Assisted Moderation
+
+**How It Works:**
+1. Every message is analyzed by Ollama (if AI enabled)
+2. AI scores message 0-100 based on server rules
+3. Messages scoring above threshold are flagged
+4. Flags appear in moderation log with:
+   - AI confidence score and risk level
+   - Violation category (Toxicity, Spam, NSFW, Harassment, Misinformation)
+   - AI reasoning
+   - Link to message and context
+5. Moderators review and take action (warn, review, or ignore)
+
+**Safety Guardrails:**
+- ✅ AI never auto-deletes messages
+- ✅ AI never auto-mutes or bans users
+- ✅ Moderators must click button to take action
+- ✅ Conservative threshold to minimize false positives
+- ✅ System continues normally if Ollama unavailable
+- ✅ Temperature set to 0.3 for consistent decisions
+
+**Risk Levels:**
+- 🟢 **Info** (0-39): May be worth reviewing
+- 🟡 **Low** (40-59): Borderline content
+- 🟠 **Medium** (60-79): Should be reviewed
+- 🔴 **High** (80-100): Immediate attention needed
+
+### Configuration
+
+**Initial Setup:**
+1. Configure moderation log channel:
+   ```
+   /modconfig set log_channel #mod-log
+   ```
+
+2. Configure appeal channel:
+   ```
+   /modconfig set appeal_channel #appeals
+   ```
+
+3. Enable AI moderation:
+   ```
+   /modconfig set ai_enabled true
+   /modconfig set ai_flag_channel #ai-flags
+   /modconfig set ai_confidence_threshold 60
+   ```
+
+4. (Optional) Set rules message for AI context:
+   ```
+   /modconfig set rules_message_id 123456789012345678
+   ```
+
+**Customization:**
+- Adjust warning decay times per warn level
+- Customize automatic mute durations
+- Set AI confidence threshold (0-100)
+- Choose AI model and Ollama host
+- Configure all channels independently
+
+### Moderation Log
+
+All moderation actions are logged in the configured log channel with rich embeds:
+- ⚠️ Warnings issued
+- ✅ Warnings removed/expired
+- 🔇 Mutes applied
+- 🔊 Mutes removed/expired
+- 📝 Appeals created
+- ⚖️ Appeals reviewed
+
+### Best Practices
+
+1. **Start Conservative**: Begin with higher AI threshold (70+) and lower it as needed
+2. **Review Regularly**: Check AI flags daily to provide feedback
+3. **Document Rules**: Set up clear server rules for AI context
+4. **Train Moderators**: Ensure team understands the appeal process
+5. **Monitor Logs**: Review moderation log channel regularly
+6. **Adjust Settings**: Fine-tune decay times and thresholds based on your community
+
+### Privacy & Data
+
+- All data stored locally in SQLite database
+- No external APIs except Ollama (runs locally)
+- User messages analyzed only if AI enabled
+- Complete audit trail for transparency
+- Appeals and warnings are permanent record
 
 ## Dependencies
 

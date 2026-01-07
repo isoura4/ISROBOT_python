@@ -187,6 +187,10 @@ class ISROBOT(commands.Bot):
         # Démarrer la tâche de vérification YouTube en arrière-plan
         self.youtube_check_task = self.loop.create_task(self.check_youtube_loop())
 
+        # Démarrer les tâches de modération en arrière-plan
+        self.warning_decay_task = self.loop.create_task(self.warning_decay_loop())
+        self.mute_expiration_task = self.loop.create_task(self.mute_expiration_loop())
+
     async def check_streams_loop(self):
         """Vérifier périodiquement le statut des streamers."""
         await self.wait_until_ready()  # Attendre que le bot soit prêt
@@ -797,11 +801,171 @@ class ISROBOT(commands.Bot):
             # En cas de dépassement de quota, la boucle continue mais les erreurs sont loggées
             await asyncio.sleep(600)
 
-    def _get_counter_lock(self, guild_id: str, channel_id: str) -> asyncio.Lock:
-        """Get or create a lock for a specific counter game channel."""
-        key = (guild_id, channel_id)
-        # Use setdefault for thread-safe lock creation
-        return self._counter_locks.setdefault(key, asyncio.Lock())
+    async def warning_decay_loop(self):
+        """
+        Vérifier périodiquement et faire expirer les avertissements.
+        
+        Note: There's a theoretical race condition if a moderator manually
+        decrements warnings while this loop is running. However, this is
+        acceptable because:
+        - The loop runs only every 6 hours
+        - Manual decrements are rare
+        - Database operations are atomic
+        - Worst case: warning decays one cycle later
+        """
+        await self.wait_until_ready()
+        logger.info("Démarrage de la boucle d'expiration des avertissements")
+
+        while not self.is_closed():
+            try:
+                from utils import moderation_utils
+
+                # Get users whose warnings should decay
+                users_to_decay = moderation_utils.get_users_for_decay()
+
+                print(f"🔍 [Modération] Vérification de {len(users_to_decay)} utilisateur(s) pour expiration...")
+                logger.debug(f"Vérification de {len(users_to_decay)} utilisateurs pour expiration")
+
+                for user_data in users_to_decay:
+                    try:
+                        guild_id = user_data["guild_id"]
+                        user_id = user_data["user_id"]
+                        warn_count = user_data["warn_count"]
+
+                        # Decrement warning
+                        new_count = moderation_utils.decrement_warning(
+                            guild_id, user_id, None, "Expiration automatique"
+                        )
+
+                        print(f"  ✓ Avertissement expiré pour l'utilisateur {user_id} dans le serveur {guild_id}")
+                        logger.info(f"Avertissement expiré: {user_id} @ {guild_id} ({warn_count} -> {new_count})")
+
+                        # If warnings reach 0, remove active mute
+                        if new_count == 0:
+                            active_mute = moderation_utils.get_active_mute(guild_id, user_id)
+                            if active_mute:
+                                guild = self.get_guild(int(guild_id))
+                                if guild:
+                                    member = guild.get_member(int(user_id))
+                                    if member:
+                                        try:
+                                            await member.timeout(None, reason="Avertissements expirés")
+                                            moderation_utils.remove_mute(
+                                                guild_id, user_id, None, "Avertissements expirés"
+                                            )
+                                            logger.info(f"Mute retiré pour {user_id} @ {guild_id}")
+                                        except Exception as e:
+                                            logger.error(f"Erreur lors du retrait du timeout: {e}")
+
+                        # Send DM notification
+                        guild = self.get_guild(int(guild_id))
+                        if guild:
+                            member = guild.get_member(int(user_id))
+                            if member:
+                                embed = moderation_utils.create_decay_embed(new_count, guild.name)
+                                await moderation_utils.send_dm_notification(member, embed)
+
+                            # Post to modlog
+                            config = moderation_utils.get_moderation_config(guild_id)
+                            if config and config.get("log_channel_id"):
+                                channel = guild.get_channel(int(config["log_channel_id"]))
+                                if channel and isinstance(channel, discord.TextChannel):
+                                    log_embed = moderation_utils.create_modlog_embed(
+                                        "decay",
+                                        member,
+                                        None,
+                                        warn_count_before=warn_count,
+                                        warn_count_after=new_count,
+                                    )
+                                    await channel.send(embed=log_embed)
+
+                    except Exception as e:
+                        logger.error(f"Erreur lors de l'expiration pour {user_data}: {e}")
+
+            except Exception as e:
+                logger.error(f"Erreur lors de la vérification d'expiration des avertissements: {e}")
+
+            # Attendre 6 heures avant la prochaine vérification
+            await asyncio.sleep(21600)
+
+    async def mute_expiration_loop(self):
+        """Vérifier périodiquement et retirer les mutes expirés."""
+        await self.wait_until_ready()
+        logger.info("Démarrage de la boucle d'expiration des mutes")
+
+        while not self.is_closed():
+            try:
+                from utils import moderation_utils
+
+                # Get expired mutes
+                expired_mutes = moderation_utils.get_expired_mutes()
+
+                if expired_mutes:
+                    print(f"🔍 [Modération] {len(expired_mutes)} mute(s) expiré(s) détecté(s)")
+                    logger.debug(f"Traitement de {len(expired_mutes)} mutes expirés")
+
+                for mute in expired_mutes:
+                    try:
+                        guild_id = mute["guild_id"]
+                        user_id = mute["user_id"]
+                        reason = mute["reason"]
+
+                        guild = self.get_guild(int(guild_id))
+                        if not guild:
+                            continue
+
+                        member = guild.get_member(int(user_id))
+                        if not member:
+                            # User left the server, just remove from database
+                            moderation_utils.remove_mute(guild_id, user_id, None, "Utilisateur absent")
+                            continue
+
+                        # Remove timeout
+                        try:
+                            await member.timeout(None, reason="Mute expiré")
+                            print(f"  ✓ Mute expiré pour {member.display_name} dans {guild.name}")
+                            logger.info(f"Mute expiré: {user_id} @ {guild_id}")
+                        except Exception as e:
+                            logger.error(f"Erreur lors du retrait du timeout: {e}")
+
+                        # Remove from database
+                        moderation_utils.remove_mute(guild_id, user_id, None, "Expiré")
+
+                        # Send DM notification
+                        embed = discord.Embed(
+                            title="🔊 Mute expiré",
+                            description=f"Votre mute sur **{guild.name}** a expiré.",
+                            color=discord.Color.green(),
+                        )
+                        embed.add_field(
+                            name="Rappel",
+                            value="N'oubliez pas de respecter les règles du serveur.",
+                            inline=False
+                        )
+                        embed.set_footer(text="Système de modération ISROBOT")
+                        await moderation_utils.send_dm_notification(member, embed)
+
+                        # Post to modlog
+                        config = moderation_utils.get_moderation_config(guild_id)
+                        if config and config.get("log_channel_id"):
+                            channel = guild.get_channel(int(config["log_channel_id"]))
+                            if channel and isinstance(channel, discord.TextChannel):
+                                log_embed = moderation_utils.create_modlog_embed(
+                                    "unmute",
+                                    member,
+                                    None,
+                                    reason="Mute expiré automatiquement",
+                                )
+                                await channel.send(embed=log_embed)
+
+                    except Exception as e:
+                        logger.error(f"Erreur lors de l'expiration du mute pour {mute}: {e}")
+
+            except Exception as e:
+                logger.error(f"Erreur lors de la vérification d'expiration des mutes: {e}")
+
+            # Attendre 1 minute avant la prochaine vérification
+            await asyncio.sleep(60)
 
     async def reset_counter_game(
         self, message: discord.Message, cursor, conn, error_message: str
@@ -828,7 +992,67 @@ class ISROBOT(commands.Bot):
         if not message.guild:
             return
 
-        # Check if this is a counting game channel (quick check without lock)
+        # --- AI MODERATION ---
+        # Analyze message with AI if enabled and not in counter game
+        try:
+            from utils import ai_moderation, moderation_utils
+
+            guild_id = str(message.guild.id)
+            config = moderation_utils.get_moderation_config(guild_id)
+
+            # Only analyze if AI is enabled and message has content
+            if config and config.get("ai_enabled", 0) == 1 and message.content:
+                # Get configuration
+                confidence_threshold = config.get("ai_confidence_threshold", 60)
+                ai_model = config.get("ai_model", "llama2")
+                ollama_host = config.get("ollama_host", "http://localhost:11434")
+                rules_message_id = config.get("rules_message_id")
+                ai_flag_channel_id = config.get("ai_flag_channel_id")
+
+                # Get server rules
+                server_rules = await ai_moderation.get_server_rules(message.guild, rules_message_id)
+
+                # Analyze message
+                result = await ai_moderation.analyze_message_with_ollama(
+                    message.content,
+                    server_rules,
+                    ollama_host,
+                    ai_model
+                )
+
+                # If analysis succeeded and score is above threshold, create flag
+                if result and result["score"] >= confidence_threshold:
+                    flag_id = await ai_moderation.create_ai_flag(
+                        guild_id,
+                        message,
+                        result["score"],
+                        result["category"],
+                        result["reason"]
+                    )
+
+                    # Post to AI flag channel
+                    if flag_id and ai_flag_channel_id:
+                        channel = message.guild.get_channel(int(ai_flag_channel_id))
+                        if channel and isinstance(channel, discord.TextChannel):
+                            embed = ai_moderation.create_ai_flag_embed(
+                                flag_id,
+                                message,
+                                result["score"],
+                                result["category"],
+                                result["reason"]
+                            )
+                            await channel.send(embed=embed)
+                            logger.info(
+                                f"Message flagué par l'IA: {message.id} "
+                                f"(score: {result['score']}, catégorie: {result['category']})"
+                            )
+
+        except Exception as e:
+            # Gracefully handle AI errors - don't let them break the bot
+            logger.error(f"Erreur lors de l'analyse IA du message: {e}")
+
+        # --- COUNTER GAME ---
+        # Quand un message est envoyé dans le salon compteur du minijeux comparé avec le dernier chiffre
         from database import get_db_connection
 
         guild_id = str(message.guild.id)
@@ -951,15 +1175,15 @@ class ISROBOT(commands.Bot):
         if hasattr(self, "youtube_check_task") and not self.youtube_check_task.done():
             logger.info("Arrêt de la tâche de vérification YouTube...")
             self.youtube_check_task.cancel()
-            try:
-                await asyncio.wait_for(self.youtube_check_task, timeout=5.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                pass
-            logger.info("Tâche de vérification YouTube arrêtée")
 
-        # Fermer la session HTTP
-        if self.session and not self.session.closed:
-            logger.info("Fermeture de la session HTTP...")
+        # Arrêter les tâches de modération
+        if hasattr(self, "warning_decay_task"):
+            self.warning_decay_task.cancel()
+
+        if hasattr(self, "mute_expiration_task"):
+            self.mute_expiration_task.cancel()
+
+        if self.session:
             await self.session.close()
             logger.info("Session HTTP fermée")
         
