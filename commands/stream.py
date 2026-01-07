@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 from typing import Optional
 
 import aiohttp
@@ -50,7 +51,6 @@ class Stream(commands.Cog):
         streamer_name = streamer_name.strip().lower()
         
         # Valider que le nom respecte les règles Twitch (4-25 caractères, alphanumériques, underscores et tirets)
-        import re
         if not re.match(r'^[a-zA-Z0-9_-]{4,25}$', streamer_name):
             await interaction.response.send_message(
                 "❌ Le nom du streamer est invalide. Les noms Twitch doivent contenir 4-25 caractères (lettres, chiffres, underscores, tirets).", 
