@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import re
 
@@ -10,6 +11,9 @@ from dotenv import load_dotenv
 
 # Chargement du fichier .env
 load_dotenv()
+
+# Logger pour ce module
+logger = logging.getLogger(__name__)
 
 # Récupération des variables d'environnement
 SERVER_ID = int(os.getenv("server_id", "0"))
@@ -162,10 +166,10 @@ class AI(commands.Cog):
                     return response["message"]["content"]
                 except ConnectionError as e:
                     logger.warning(f"Erreur de connexion Ollama: {e}")
-                    return f"❌ Impossible de se connecter au serveur IA. Vérifiez que Ollama est en cours d'exécution."
+                    return "❌ Impossible de se connecter au serveur IA. Vérifiez que Ollama est en cours d'exécution."
                 except TimeoutError as e:
                     logger.warning(f"Timeout Ollama: {e}")
-                    return f"❌ Le serveur IA a mis trop de temps à répondre. Réessayez plus tard."
+                    return "❌ Le serveur IA a mis trop de temps à répondre. Réessayez plus tard."
                 except Exception as e:
                     logger.error(f"Erreur Ollama: {e}")
                     return f"❌ Erreur lors de la communication avec l'IA: {str(e)}"
