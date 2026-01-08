@@ -1,5 +1,7 @@
 import asyncio
+import logging
 import os
+import re
 from typing import Optional
 
 import aiohttp
@@ -12,6 +14,9 @@ import database
 
 # Chargement du fichier .env
 load_dotenv()
+
+# Logger pour ce module
+logger = logging.getLogger(__name__)
 
 # Récupération des variables d'environnement
 SERVER_ID = int(os.getenv("server_id", "0"))
@@ -35,32 +40,54 @@ class Stream(commands.Cog):
         channel: discord.TextChannel,
         ping_role: discord.Role = None,
     ):
+        # Validation des entrées
+        if not streamer_name or not streamer_name.strip():
+            await interaction.response.send_message(
+                "❌ Le nom du streamer ne peut pas être vide.", ephemeral=True
+            )
+            return
+        
+        # Nettoyer le nom du streamer (enlever les espaces et convertir en minuscules)
+        streamer_name = streamer_name.strip().lower()
+        
+        # Valider que le nom respecte les règles Twitch (4-25 caractères, alphanumériques, underscores et tirets)
+        if not re.match(r'^[a-zA-Z0-9_-]{4,25}$', streamer_name):
+            await interaction.response.send_message(
+                "❌ Le nom du streamer est invalide. Les noms Twitch doivent contenir 4-25 caractères (lettres, chiffres, underscores, tirets).", 
+                ephemeral=True
+            )
+            return
+        
         # Logique pour ajouter le streamer à la base de données
         if not TWITCH_CLIENT_ID or not TWITCH_CLIENT_SECRET:
             await interaction.response.send_message(
-                "Les identifiants Twitch ne sont pas configurés."
+                "❌ Les identifiants Twitch ne sont pas configurés.", ephemeral=True
             )
             return
-        else:
+        
+        try:
             # Connexion à la base de données SQLite:
             # Vérifier si le streamer existe déjà dans la base de données
             conn = database.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM streamers WHERE streamerName = ? AND streamChannelId = ?",
-                (streamer_name, str(channel.id)),
-            )
-            result = cursor.fetchone()
-            conn.close()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT * FROM streamers WHERE streamerName = ? AND streamChannelId = ?",
+                    (streamer_name, str(channel.id)),
+                )
+                result = cursor.fetchone()
+            finally:
+                conn.close()
 
             if result:
                 await interaction.response.send_message(
-                    f"Le streamer {streamer_name} est déjà dans la liste."
+                    f"ℹ️ Le streamer {streamer_name} est déjà dans la liste.", ephemeral=True
                 )
                 return
-            if result is None:
-                # Ajouter le streamer et le channel id sélectionné à la base de données
-                conn = database.get_db_connection()
+            
+            # Ajouter le streamer et le channel id sélectionné à la base de données
+            conn = database.get_db_connection()
+            try:
                 cursor = conn.cursor()
                 cursor.execute(
                     "INSERT INTO streamers (streamerName, streamChannelId, roleId) VALUES (?, ?, ?)",
@@ -71,15 +98,22 @@ class Stream(commands.Cog):
                     ),
                 )
                 conn.commit()
+            finally:
                 conn.close()
-                # Envoyer un message de confirmation
-                await interaction.response.send_message(
-                    f"Streamer ajouté : {streamer_name} dans le salon {channel.mention}."
+            
+            # Envoyer un message de confirmation
+            await interaction.response.send_message(
+                f"✅ Streamer ajouté : **{streamer_name}** dans le salon {channel.mention}."
+            )
+            if ping_role is not None:
+                await interaction.followup.send(
+                    f"L'annonce sera faite avec la mention: {ping_role.mention}"
                 )
-                if ping_role is not None:
-                    await interaction.followup.send(
-                        f"L'annonce sera faite avec la mention: {ping_role.mention}"
-                    )
+        except Exception as e:
+            logger.error(f"Erreur lors de l'ajout du streamer {streamer_name}: {e}")
+            await interaction.response.send_message(
+                f"❌ Erreur lors de l'ajout du streamer: {str(e)}", ephemeral=True
+            )
 
     async def check_streams(self):
         """Vérifier le statut de tous les streamers dans la base de données."""
@@ -103,32 +137,42 @@ class Stream(commands.Cog):
     )
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.default_permissions(administrator=True)
-    # Sélectionner le streamer à retirer dans la base de données en fonction de ceux actuellement dans la base de données
     async def stream_remove(self, interaction: discord.Interaction, streamer_name: str):
         """Retirer un streamer de la liste des streamers."""
-        if not streamer_name:
-            conn = database.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT streamerName FROM streamers")
-            streamers = cursor.fetchall()
-            conn.close()
-            if not streamers:
-                await interaction.response.send_message(
-                    "Aucun streamer n'est actuellement enregistré."
-                )
-                return
-            streamer_list = "\n".join([s[0] for s in streamers])
+        # Validation des entrées
+        if not streamer_name or not streamer_name.strip():
             await interaction.response.send_message(
-                f"Veuillez spécifier le nom du streamer à retirer. Ceux disponibles sont :\n{streamer_list}"
+                "❌ Le nom du streamer ne peut pas être vide.", ephemeral=True
             )
             return
-        # Logique pour retirer le streamer de la base de données
-        conn = database.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM streamers WHERE streamerName = ?", (streamer_name,))
-        conn.commit()
-        conn.close()
-        await interaction.response.send_message(f"Streamer retiré : {streamer_name}")
+        
+        streamer_name = streamer_name.strip().lower()
+        
+        try:
+            # Logique pour retirer le streamer de la base de données
+            conn = database.get_db_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM streamers WHERE streamerName = ?", (streamer_name,))
+                rows_deleted = cursor.rowcount
+                conn.commit()
+            finally:
+                conn.close()
+            
+            if rows_deleted > 0:
+                await interaction.response.send_message(
+                    f"✅ Streamer retiré : **{streamer_name}**"
+                )
+            else:
+                await interaction.response.send_message(
+                    f"❌ Streamer non trouvé : **{streamer_name}**\nVérifiez l'orthographe du nom.",
+                    ephemeral=True
+                )
+        except Exception as e:
+            logger.error(f"Erreur lors de la suppression du streamer {streamer_name}: {e}")
+            await interaction.response.send_message(
+                f"❌ Erreur lors de la suppression du streamer: {str(e)}", ephemeral=True
+            )
 
 
 class GetTwitchOAuth:
@@ -139,8 +183,8 @@ class GetTwitchOAuth:
         self.client_secret = TWITCH_CLIENT_SECRET
         self.session = session
 
-    async def get_auth_token(self):
-        """Obtenir un token d'authentification pour l'API Twitch."""
+    async def get_auth_token(self, retry_count: int = 3):
+        """Obtenir un token d'authentification pour l'API Twitch avec retry."""
         if not self.client_id or not self.client_secret:
             raise ValueError("Les identifiants Twitch ne sont pas configurés.")
 
@@ -150,13 +194,33 @@ class GetTwitchOAuth:
             "client_secret": self.client_secret,
             "grant_type": "client_credentials",
         }
-        async with self.session.post(urlOAuth, params=params) as response:
-            if response.status != 200:
-                raise Exception(
-                    f"Erreur lors de la récupération du token OAuth: {response.status}"
-                )
-            data = await response.json()
-            return data["access_token"]
+        
+        last_error = None
+        for attempt in range(retry_count):
+            try:
+                async with self.session.post(urlOAuth, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data["access_token"]
+                    elif response.status >= 500:
+                        # Erreur serveur, réessayer
+                        last_error = f"Erreur serveur Twitch: {response.status}"
+                        if attempt < retry_count - 1:
+                            await asyncio.sleep(2 ** attempt)  # Backoff exponentiel
+                            continue
+                    else:
+                        # Erreur client (4xx), ne pas réessayer
+                        raise Exception(
+                            f"Erreur lors de la récupération du token OAuth: {response.status}"
+                        )
+            except (asyncio.TimeoutError, aiohttp.ClientError) as e:
+                last_error = str(e)
+                if attempt < retry_count - 1:
+                    logger.warning(f"Tentative {attempt + 1}/{retry_count} échouée pour l'authentification Twitch: {e}")
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                    
+        raise Exception(f"Échec de l'authentification Twitch après {retry_count} tentatives: {last_error}")
 
 
 class StartStreamCheckInterval:
@@ -188,19 +252,39 @@ class CheckTwitchStatus:
         self.session = session
         self.oauth = GetTwitchOAuth(session)
 
-    async def check_streamer_status(self, streamer_name: str):
-        """Vérifier si un streamer est en ligne."""
-        token = await self.oauth.get_auth_token()
-        headers = {"Client-ID": TWITCH_CLIENT_ID, "Authorization": f"Bearer {token}"}
-        url = f"https://api.twitch.tv/helix/streams?user_login={streamer_name}"
+    async def check_streamer_status(self, streamer_name: str, retry_count: int = 3):
+        """Vérifier si un streamer est en ligne avec retry."""
+        last_error = None
+        
+        for attempt in range(retry_count):
+            try:
+                token = await self.oauth.get_auth_token()
+                headers = {"Client-ID": TWITCH_CLIENT_ID, "Authorization": f"Bearer {token}"}
+                url = f"https://api.twitch.tv/helix/streams?user_login={streamer_name}"
 
-        async with self.session.get(url, headers=headers) as response:
-            if response.status != 200:
-                raise Exception(
-                    f"Erreur lors de la vérification du statut du streamer: {response.status}"
-                )
-            data = await response.json()
-            return data["data"]
+                async with self.session.get(url, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data.get("data", [])
+                    elif response.status >= 500:
+                        # Erreur serveur, réessayer
+                        last_error = f"Erreur serveur Twitch: {response.status}"
+                        if attempt < retry_count - 1:
+                            await asyncio.sleep(2 ** attempt)
+                            continue
+                    else:
+                        # Erreur client, ne pas réessayer
+                        raise Exception(
+                            f"Erreur lors de la vérification du statut du streamer: {response.status}"
+                        )
+            except (asyncio.TimeoutError, aiohttp.ClientError) as e:
+                last_error = str(e)
+                if attempt < retry_count - 1:
+                    logger.warning(f"Tentative {attempt + 1}/{retry_count} échouée pour {streamer_name}: {e}")
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+        
+        raise Exception(f"Échec de la vérification du streamer {streamer_name} après {retry_count} tentatives: {last_error}")
 
 
 class AnnounceStream:
