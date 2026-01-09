@@ -10,6 +10,7 @@ import sys
 
 import aiohttp
 import discord
+from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -18,25 +19,12 @@ import database
 # Chargement du fichier .env
 load_dotenv()
 
-# Parametrage des logs - Faire ceci en premier
-# Configuration avancée avec rotation des logs et sortie console
-logging.basicConfig(
-    level=logging.INFO,
-    encoding="utf-8",
-    format="%(asctime)s:%(levelname)s:%(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        # Log vers fichier
-        logging.FileHandler("discord.log", encoding="utf-8"),
-        # Log vers console pour debug
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+# Configure logging using the new logging system
+from utils.logging_config import setup_logging, get_logger
 
-# Réduire le niveau de log pour les bibliothèques tierces
-logging.getLogger("discord").setLevel(logging.WARNING)
-logging.getLogger("aiohttp").setLevel(logging.WARNING)
+# Setup logging with rotation and configurable levels
+setup_logging()
+logger = get_logger(__name__)
 
 
 def validate_environment_variables():
@@ -131,6 +119,9 @@ class ISROBOT(commands.Bot):
         # Créer une session HTTP pour les requêtes API avec timeout
         timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=15)
         self.session = aiohttp.ClientSession(timeout=timeout)
+        
+        # Configure global error handler for app commands
+        self.tree.on_error = self.on_app_command_error
 
         # Lancer le script database.py pour créer la base de données
         print("Initialisation de la base de données...")
@@ -205,6 +196,12 @@ class ISROBOT(commands.Bot):
         # Démarrer les tâches de modération en arrière-plan
         self.warning_decay_task = self.loop.create_task(self.warning_decay_loop())
         self.mute_expiration_task = self.loop.create_task(self.mute_expiration_loop())
+        
+        # Démarrer la tâche de sauvegarde automatique
+        self.backup_task = self.loop.create_task(self.scheduled_backup_loop())
+        
+        # Démarrer la tâche de nettoyage du rate limiter
+        self.rate_limit_cleanup_task = self.loop.create_task(self.rate_limit_cleanup_loop())
 
     async def check_streams_loop(self):
         """Vérifier périodiquement le statut des streamers."""
@@ -981,6 +978,75 @@ class ISROBOT(commands.Bot):
             # Attendre 1 minute avant la prochaine vérification
             await asyncio.sleep(60)
 
+    async def scheduled_backup_loop(self):
+        """Périodiquement créer des sauvegardes automatiques de la base de données."""
+        await self.wait_until_ready()
+        logger.info("Démarrage de la boucle de sauvegarde automatique")
+
+        while not self.is_closed():
+            try:
+                from utils.backup import scheduled_backup, auto_recover_database
+                
+                # Check database integrity first
+                is_healthy = auto_recover_database()
+                if not is_healthy:
+                    logger.error("La base de données est corrompue et n'a pas pu être récupérée")
+                
+                # Create scheduled backup
+                backup_path = await scheduled_backup()
+                if backup_path:
+                    print(f"💾 [Backup] Sauvegarde automatique créée: {backup_path.name}")
+                else:
+                    logger.warning("La sauvegarde automatique a échoué")
+                    
+            except Exception as e:
+                logger.error(f"Erreur lors de la sauvegarde automatique: {e}")
+
+            # Attendre 6 heures avant la prochaine sauvegarde
+            await asyncio.sleep(21600)
+
+    async def rate_limit_cleanup_loop(self):
+        """Périodiquement nettoyer les anciennes entrées de rate limiting."""
+        await self.wait_until_ready()
+        logger.info("Démarrage de la boucle de nettoyage du rate limiter")
+
+        while not self.is_closed():
+            try:
+                from utils.security import rate_limiter
+                rate_limiter.cleanup()
+                logger.debug("Nettoyage du rate limiter effectué")
+                
+            except Exception as e:
+                logger.error(f"Erreur lors du nettoyage du rate limiter: {e}")
+
+            # Attendre 10 minutes avant le prochain nettoyage
+            await asyncio.sleep(600)
+
+    async def on_app_command_error(
+        self, 
+        interaction: discord.Interaction, 
+        error: app_commands.AppCommandError
+    ):
+        """Global error handler for app commands (slash commands)."""
+        from utils.error_handlers import handle_interaction_error, classify_error
+        
+        # Unwrap the error if it's wrapped
+        original_error = error
+        if hasattr(error, 'original'):
+            original_error = error.original
+        
+        # Log the error
+        error_key, _ = classify_error(original_error)
+        command_name = interaction.command.name if interaction.command else "unknown"
+        
+        logger.error(
+            f"App command error in /{command_name}: [{error_key}] {original_error}",
+            exc_info=original_error if error_key == "unknown_error" else None
+        )
+        
+        # Handle the error and send user-friendly message
+        await handle_interaction_error(interaction, original_error)
+
     async def reset_counter_game(
         self, message: discord.Message, cursor, conn, error_message: str
     ):
@@ -1010,56 +1076,62 @@ class ISROBOT(commands.Bot):
         # Analyze message with AI if enabled and not in counter game
         try:
             from utils import ai_moderation, moderation_utils
+            from utils.ai_toggle import check_ai_enabled
 
             guild_id = str(message.guild.id)
-            config = moderation_utils.get_moderation_config(guild_id)
+            
+            # Check global AI toggle first
+            if not check_ai_enabled("moderation"):
+                pass  # AI moderation is globally disabled, skip analysis
+            else:
+                config = moderation_utils.get_moderation_config(guild_id)
 
-            # Only analyze if AI is enabled and message has content
-            if config and config.get("ai_enabled", 0) == 1 and message.content:
-                # Get configuration
-                confidence_threshold = config.get("ai_confidence_threshold", 60)
-                ai_model = config.get("ai_model", "llama2")
-                ollama_host = config.get("ollama_host", "http://localhost:11434")
-                rules_message_id = config.get("rules_message_id")
-                ai_flag_channel_id = config.get("ai_flag_channel_id")
+                # Only analyze if AI is enabled and message has content
+                if config and config.get("ai_enabled", 0) == 1 and message.content:
+                    # Get configuration
+                    confidence_threshold = config.get("ai_confidence_threshold", 60)
+                    ai_model = config.get("ai_model", "llama2")
+                    ollama_host = config.get("ollama_host", "http://localhost:11434")
+                    rules_message_id = config.get("rules_message_id")
+                    ai_flag_channel_id = config.get("ai_flag_channel_id")
 
-                # Get server rules
-                server_rules = await ai_moderation.get_server_rules(message.guild, rules_message_id)
+                    # Get server rules
+                    server_rules = await ai_moderation.get_server_rules(message.guild, rules_message_id)
 
-                # Analyze message
-                result = await ai_moderation.analyze_message_with_ollama(
-                    message.content,
-                    server_rules,
-                    ollama_host,
-                    ai_model
-                )
-
-                # If analysis succeeded and score is above threshold, create flag
-                if result and result["score"] >= confidence_threshold:
-                    flag_id = await ai_moderation.create_ai_flag(
-                        guild_id,
-                        message,
-                        result["score"],
-                        result["category"],
-                        result["reason"]
+                    # Analyze message
+                    result = await ai_moderation.analyze_message_with_ollama(
+                        message.content,
+                        server_rules,
+                        ollama_host,
+                        ai_model
                     )
 
-                    # Post to AI flag channel
-                    if flag_id and ai_flag_channel_id:
-                        channel = message.guild.get_channel(int(ai_flag_channel_id))
-                        if channel and isinstance(channel, discord.TextChannel):
-                            embed = ai_moderation.create_ai_flag_embed(
-                                flag_id,
-                                message,
-                                result["score"],
-                                result["category"],
-                                result["reason"]
-                            )
-                            await channel.send(embed=embed)
-                            logger.info(
-                                f"Message flagué par l'IA: {message.id} "
-                                f"(score: {result['score']}, catégorie: {result['category']})"
-                            )
+                    # If analysis succeeded and score is above threshold, create flag
+                    if result and result["score"] >= confidence_threshold:
+                        flag_id = await ai_moderation.create_ai_flag(
+                            guild_id,
+                            message,
+                            result["score"],
+                            result["category"],
+                            result["reason"]
+                        )
+
+                        # Post to AI flag channel
+                        if flag_id and ai_flag_channel_id:
+                            channel = message.guild.get_channel(int(ai_flag_channel_id))
+                            if channel and isinstance(channel, discord.TextChannel):
+                                embed = ai_moderation.create_ai_flag_embed(
+                                    flag_id,
+                                    message,
+                                    result["score"],
+                                    result["category"],
+                                    result["reason"]
+                                )
+                                await channel.send(embed=embed)
+                                logger.info(
+                                    f"Message flagué par l'IA: {message.id} "
+                                    f"(score: {result['score']}, catégorie: {result['category']})"
+                                )
 
         except Exception as e:
             # Gracefully handle AI errors - don't let them break the bot
@@ -1196,6 +1268,14 @@ class ISROBOT(commands.Bot):
 
         if hasattr(self, "mute_expiration_task"):
             self.mute_expiration_task.cancel()
+        
+        # Arrêter la tâche de sauvegarde automatique
+        if hasattr(self, "backup_task"):
+            self.backup_task.cancel()
+        
+        # Arrêter la tâche de nettoyage du rate limiter
+        if hasattr(self, "rate_limit_cleanup_task"):
+            self.rate_limit_cleanup_task.cancel()
 
         if self.session:
             await self.session.close()
