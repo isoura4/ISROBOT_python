@@ -990,7 +990,12 @@ class ISROBOT(commands.Bot):
                 # Check database integrity first
                 is_healthy = auto_recover_database()
                 if not is_healthy:
-                    logger.error("La base de données est corrompue et n'a pas pu être récupérée")
+                    logger.critical(
+                        "⚠️ ALERTE CRITIQUE: La base de données est corrompue et n'a pas pu être récupérée! "
+                        "Le bot continue de fonctionner mais certaines fonctionnalités peuvent échouer. "
+                        "Intervention manuelle requise."
+                    )
+                    print("❌ [CRITIQUE] Base de données corrompue - intervention manuelle requise!")
                 
                 # Create scheduled backup
                 backup_path = await scheduled_backup()

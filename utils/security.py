@@ -13,13 +13,11 @@ import re
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import discord
 from discord import app_commands
 from discord.ext import commands
-
-import database
 
 logger = logging.getLogger(__name__)
 
@@ -498,15 +496,26 @@ def check_rate_limit(command_cooldown: Optional[int] = None):
             )
             
             if is_limited:
-                from utils.error_handlers import format_cooldown_time, ERROR_MESSAGES
+                # Format the cooldown time inline to avoid circular imports
+                def format_time(seconds: float) -> str:
+                    if seconds < 60:
+                        return f"{int(seconds)} seconde{'s' if seconds >= 2 else ''}"
+                    elif seconds < 3600:
+                        minutes = int(seconds / 60)
+                        return f"{minutes} minute{'s' if minutes >= 2 else ''}"
+                    else:
+                        hours = int(seconds / 3600)
+                        return f"{hours} heure{'s' if hours >= 2 else ''}"
                 
                 if reason == "cooldown":
-                    message = ERROR_MESSAGES["cooldown"].format(
-                        time=format_cooldown_time(retry_after)
+                    message = (
+                        "⏳ **Cooldown actif**\n"
+                        f"Veuillez patienter {format_time(retry_after)} avant de réutiliser cette commande."
                     )
                 else:
-                    message = ERROR_MESSAGES["rate_limited"].format(
-                        time=format_cooldown_time(retry_after)
+                    message = (
+                        "🚫 **Limite de requêtes atteinte**\n"
+                        f"Vous avez fait trop de requêtes. Veuillez patienter {format_time(retry_after)}."
                     )
                 
                 embed = discord.Embed(

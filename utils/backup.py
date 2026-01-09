@@ -13,7 +13,7 @@ import shutil
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 
@@ -255,7 +255,7 @@ def restore_database(
         return False
 
 
-def check_database_corruption(db_path: Optional[Path] = None) -> tuple[bool, Optional[str]]:
+def check_database_corruption(db_path: Optional[Path] = None) -> Tuple[bool, Optional[str]]:
     """
     Check if the database is corrupted.
     
@@ -331,9 +331,9 @@ def auto_recover_database() -> bool:
 
 
 def backup_config_files(
-    config_files: Optional[list[str]] = None,
+    config_files: Optional[List[str]] = None,
     backup_dir: Optional[Path] = None
-) -> list[Path]:
+) -> List[Path]:
     """
     Backup critical configuration files.
     
@@ -374,7 +374,7 @@ def backup_config_files(
 def get_backup_list(
     backup_dir: Optional[Path] = None,
     prefix: str = "db_backup"
-) -> list[dict]:
+) -> List[Dict[str, Any]]:
     """
     Get a list of available backups with metadata.
     

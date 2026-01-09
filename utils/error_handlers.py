@@ -12,7 +12,7 @@ import asyncio
 import logging
 import sqlite3
 from functools import wraps
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import aiohttp
 import discord
@@ -110,7 +110,7 @@ ERROR_MESSAGES = {
 
 # --- Error Classification ---
 
-def classify_error(error: Exception) -> tuple[str, dict]:
+def classify_error(error: Exception) -> Tuple[str, Dict[str, Any]]:
     """
     Classify an exception and return the appropriate error key and context.
     
