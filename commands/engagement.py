@@ -72,7 +72,7 @@ class EngagementSystem(commands.Cog):
                 INSERT INTO engagement_config (guild_id, created_at)
                 VALUES (?, ?)
                 """,
-                (guild_id, datetime.utcnow().isoformat())
+                (guild_id, datetime.now(timezone.utc).isoformat())
             )
             conn.commit()
 
@@ -190,7 +190,7 @@ N'hésitez pas à poser des questions !""",
 
         # --- Anti-spam XP check (1 message per minute) ---
         cooldown_key = f"{guild_id}_{user_id}"
-        current_time = datetime.utcnow().timestamp()
+        current_time = datetime.now(timezone.utc).timestamp()
 
         if cooldown_key in self.message_cooldowns:
             if current_time - self.message_cooldowns[cooldown_key] < 60:
@@ -236,7 +236,7 @@ N'hésitez pas à poser des questions !""",
         if has_welcome and message.mentions:
             # Anti-spam: limit to one welcome bonus per minute
             cooldown_key = f"welcome_{message.guild.id}_{message.author.id}"
-            current_time = datetime.utcnow().timestamp()
+            current_time = datetime.now(timezone.utc).timestamp()
 
             if cooldown_key in self.welcome_cooldowns:
                 if current_time - self.welcome_cooldowns[cooldown_key] < 60:
@@ -419,7 +419,7 @@ N'hésitez pas à poser des questions !"""
 
             # Record in database for scheduled removal
             duration_days = config.get("new_member_role_duration_days", 7)
-            expires_at = datetime.utcnow() + timedelta(days=duration_days)
+            expires_at = datetime.now(timezone.utc) + timedelta(days=duration_days)
 
             conn = get_db_connection()
             try:
@@ -434,7 +434,7 @@ N'hésitez pas à poser des questions !"""
                         str(member.guild.id),
                         str(member.id),
                         str(role_id),
-                        datetime.utcnow().isoformat(),
+                        datetime.now(timezone.utc).isoformat(),
                         expires_at.isoformat()
                     )
                 )
@@ -485,7 +485,7 @@ N'hésitez pas à poser des questions !"""
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
-            today = datetime.utcnow().strftime("%Y-%m-%d")
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
             cursor.execute(
                 """
@@ -507,7 +507,7 @@ N'hésitez pas à poser des questions !"""
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
-            today = datetime.utcnow().strftime("%Y-%m-%d")
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
             cursor.execute(
                 """
@@ -529,7 +529,7 @@ N'hésitez pas à poser des questions !"""
     async def weekly_challenge_task(self):
         """Post weekly challenge every Monday at 9h."""
         # Check if today is Monday
-        if datetime.utcnow().weekday() != 0:
+        if datetime.now(timezone.utc).weekday() != 0:
             return
 
         # Get all guilds with challenges configured
@@ -619,7 +619,7 @@ N'hésitez pas à poser des questions !"""
                     (
                         guild_id,
                         challenge["id"],
-                        datetime.utcnow().isoformat(),
+                        datetime.now(timezone.utc).isoformat(),
                         str(message.id)
                     )
                 )
@@ -691,7 +691,7 @@ N'hésitez pas à poser des questions !"""
                         challenge["name"],
                         challenge["description"],
                         challenge["reward_xp"],
-                        datetime.utcnow().isoformat()
+                        datetime.now(timezone.utc).isoformat()
                     )
                 )
             conn.commit()
@@ -821,7 +821,7 @@ N'hésitez pas à poser des questions !"""
                     (guild_id, event_id, reminder_type, sent_at)
                     VALUES (?, ?, ?, ?)
                     """,
-                    (guild_id, event_id, reminder_type, datetime.utcnow().isoformat())
+                    (guild_id, event_id, reminder_type, datetime.now(timezone.utc).isoformat())
                 )
                 conn.commit()
 
@@ -839,7 +839,7 @@ N'hésitez pas à poser des questions !"""
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
 
             cursor.execute(
                 """
@@ -974,7 +974,7 @@ N'hésitez pas à poser des questions !"""
                         points,
                         str(role.id),
                         role.name,
-                        datetime.utcnow().isoformat()
+                        datetime.now(timezone.utc).isoformat()
                     )
                 )
                 conn.commit()
@@ -1098,7 +1098,7 @@ N'hésitez pas à poser des questions !"""
                         name,
                         description,
                         reward_xp,
-                        datetime.utcnow().isoformat()
+                        datetime.now(timezone.utc).isoformat()
                     )
                 )
                 conn.commit()

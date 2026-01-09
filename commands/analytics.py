@@ -10,7 +10,7 @@ Handles Priority 5: Analytics Command (!stats)
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import discord
 from discord.ext import commands
@@ -67,7 +67,7 @@ class Analytics(commands.Cog):
 
             guild_id = str(guild.id)
             start_date = (
-                datetime.utcnow() - timedelta(days=days)
+                datetime.now(timezone.utc) - timedelta(days=days)
             ).strftime("%Y-%m-%d")
 
             # Generate report
@@ -173,7 +173,7 @@ class Analytics(commands.Cog):
             title=f"📊 Rapport Analytics - {guild.name}",
             description=f"**Période:** {period_name}",
             color=discord.Color.blue(),
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
 
         if guild.icon:
@@ -264,7 +264,7 @@ class Analytics(commands.Cog):
             )
 
         embed.set_footer(
-            text=f"Généré par ISROBOT • {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+            text=f"Généré par ISROBOT • {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
 
         return embed

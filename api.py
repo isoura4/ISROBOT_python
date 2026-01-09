@@ -11,7 +11,7 @@ This module provides REST endpoints for the web dashboard to:
 
 import os
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from dotenv import load_dotenv
@@ -32,6 +32,13 @@ CORS(app, origins=os.getenv("DASHBOARD_ORIGINS", "http://localhost:3000").split(
 
 # API secret for authentication (should match dashboard)
 API_SECRET = os.getenv("API_SECRET", "change-me-in-production")
+
+# Warn if using default API secret
+if API_SECRET == "change-me-in-production":
+    logger.warning(
+        "⚠️ SECURITY WARNING: Using default API_SECRET. "
+        "Please set a secure API_SECRET in your environment variables for production."
+    )
 
 
 def require_api_key(f):
@@ -66,7 +73,7 @@ def get_guild_stats(guild_id: str):
     else:
         days = 365 * 10  # All time
 
-    start_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    start_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
 
     conn = get_db_connection()
     try:
@@ -277,7 +284,7 @@ def update_guild_config(guild_id: str):
                     INSERT OR IGNORE INTO engagement_config (guild_id, created_at)
                     VALUES (?, ?)
                     """,
-                    (guild_id, datetime.utcnow().isoformat())
+                    (guild_id, datetime.now(timezone.utc).isoformat())
                 )
 
                 # Build update query safely
@@ -314,7 +321,7 @@ def update_guild_config(guild_id: str):
                     INSERT OR IGNORE INTO moderation_config (guild_id, created_at)
                     VALUES (?, ?)
                     """,
-                    (guild_id, datetime.utcnow().isoformat())
+                    (guild_id, datetime.now(timezone.utc).isoformat())
                 )
 
                 set_clauses = []
@@ -352,7 +359,7 @@ def update_guild_config(guild_id: str):
                             threshold["threshold_points"],
                             threshold["role_id"],
                             threshold.get("role_name", ""),
-                            datetime.utcnow().isoformat()
+                            datetime.now(timezone.utc).isoformat()
                         )
                     )
 
@@ -429,7 +436,7 @@ def create_challenge(guild_id: str):
                 description,
                 reward_xp,
                 reward_role_id,
-                datetime.utcnow().isoformat()
+                datetime.now(timezone.utc).isoformat()
             )
         )
         conn.commit()
@@ -522,7 +529,7 @@ def health_check():
     """Health check endpoint."""
     return jsonify({
         "status": "ok",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     })
 
 
