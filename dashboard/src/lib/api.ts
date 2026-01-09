@@ -11,7 +11,7 @@ interface FetchOptions extends RequestInit {
 
 async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const { params, ...fetchOptions } = options;
-  
+
   let url = `${API_BASE_URL}${endpoint}`;
   if (params) {
     const searchParams = new URLSearchParams(params);
@@ -81,8 +81,13 @@ export interface GuildConfig {
     ai_enabled?: number;
     ai_confidence_threshold?: number;
     ai_model?: string;
+    log_channel_id?: string;
+    appeal_channel_id?: string;
     mute_duration_warn_2?: number;
     mute_duration_warn_3?: number;
+    warn_1_decay_days?: number;
+    warn_2_decay_days?: number;
+    warn_3_decay_days?: number;
   };
   xp_thresholds: Array<{
     threshold_points: number;
@@ -111,6 +116,34 @@ export interface Leaderboard {
   }>;
 }
 
+export interface Streamer {
+  id: number;
+  streamerName: string;
+  streamChannelId: string;
+  roleId: string;
+}
+
+export interface YouTubeChannel {
+  id: number;
+  channelId: string;
+  channelName: string;
+  discordChannelId: string;
+  roleId: string;
+  notifyVideos: number;
+  notifyShorts: number;
+  notifyLive: number;
+}
+
+export interface MinigameSettings {
+  minigame_enabled: number;
+  minigame_channel_id: string | null;
+  xp_trading_enabled: number;
+  trade_tax_percent: number;
+  duel_tax_percent: number;
+  capture_cooldown_seconds: number;
+  duel_cooldown_seconds: number;
+}
+
 // API functions
 export const api = {
   // Stats
@@ -118,8 +151,8 @@ export const api = {
     fetchApi<GuildStats>(`/api/guilds/${guildId}/stats`, { params: { period } }),
 
   getLeaderboard: (guildId: string, limit = 10) =>
-    fetchApi<Leaderboard>(`/api/guilds/${guildId}/leaderboard`, { 
-      params: { limit: limit.toString() } 
+    fetchApi<Leaderboard>(`/api/guilds/${guildId}/leaderboard`, {
+      params: { limit: limit.toString() }
     }),
 
   // Config
@@ -151,6 +184,52 @@ export const api = {
   deleteChallenge: (guildId: string, challengeId: number) =>
     fetchApi<{ success: boolean }>(`/api/guilds/${guildId}/challenges/${challengeId}`, {
       method: 'DELETE',
+    }),
+
+  // Streamers (Twitch)
+  getStreamers: (guildId: string) =>
+    fetchApi<{ guild_id: string; streamers: Streamer[] }>(`/api/guilds/${guildId}/streamers`),
+
+  addStreamer: (guildId: string, streamer: Omit<Streamer, 'id'>) =>
+    fetchApi<{ success: boolean; streamer_id: number }>(`/api/guilds/${guildId}/streamers`, {
+      method: 'POST',
+      body: JSON.stringify(streamer),
+    }),
+
+  deleteStreamer: (guildId: string, streamerId: number) =>
+    fetchApi<{ success: boolean }>(`/api/guilds/${guildId}/streamers/${streamerId}`, {
+      method: 'DELETE',
+    }),
+
+  // YouTube
+  getYouTubeChannels: (guildId: string) =>
+    fetchApi<{ guild_id: string; youtube_channels: YouTubeChannel[] }>(`/api/guilds/${guildId}/youtube`),
+
+  addYouTubeChannel: (guildId: string, channel: Omit<YouTubeChannel, 'id'>) =>
+    fetchApi<{ success: boolean; youtube_channel_id: number }>(`/api/guilds/${guildId}/youtube`, {
+      method: 'POST',
+      body: JSON.stringify(channel),
+    }),
+
+  updateYouTubeChannel: (guildId: string, channelId: number, data: Partial<YouTubeChannel>) =>
+    fetchApi<{ success: boolean }>(`/api/guilds/${guildId}/youtube/${channelId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteYouTubeChannel: (guildId: string, channelId: number) =>
+    fetchApi<{ success: boolean }>(`/api/guilds/${guildId}/youtube/${channelId}`, {
+      method: 'DELETE',
+    }),
+
+  // Minigame Settings
+  getMinigameSettings: (guildId: string) =>
+    fetchApi<{ guild_id: string; settings: MinigameSettings }>(`/api/guilds/${guildId}/minigame-settings`),
+
+  updateMinigameSettings: (guildId: string, settings: Partial<MinigameSettings>) =>
+    fetchApi<{ success: boolean }>(`/api/guilds/${guildId}/minigame-settings`, {
+      method: 'POST',
+      body: JSON.stringify(settings),
     }),
 
   // Health

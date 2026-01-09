@@ -522,6 +522,350 @@ def delete_challenge(guild_id: str, challenge_id: int):
         conn.close()
 
 
+# --- STREAMERS ENDPOINTS ---
+
+@app.route("/api/guilds/<guild_id>/streamers", methods=["GET"])
+@require_api_key
+def get_streamers(guild_id: str):
+    """Get all Twitch streamers for a guild."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, streamerName, streamChannelId, roleId
+            FROM streamers
+            ORDER BY streamerName ASC
+            """
+        )
+        streamers = [dict(row) for row in cursor.fetchall()]
+
+        return jsonify({
+            "guild_id": guild_id,
+            "streamers": streamers
+        })
+    except Exception as e:
+        logger.error(f"Error getting streamers: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/guilds/<guild_id>/streamers", methods=["POST"])
+@require_api_key
+def add_streamer(guild_id: str):
+    """Add a new Twitch streamer."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    streamer_name = data.get("streamerName")
+    channel_id = data.get("streamChannelId")
+    role_id = data.get("roleId")
+
+    if not streamer_name:
+        return jsonify({"error": "Streamer name is required"}), 400
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO streamers (streamerName, streamChannelId, roleId, announced, startTime)
+            VALUES (?, ?, ?, 0, NULL)
+            """,
+            (streamer_name.lower(), channel_id, role_id)
+        )
+        conn.commit()
+
+        return jsonify({
+            "success": True,
+            "streamer_id": cursor.lastrowid,
+            "message": "Streamer added"
+        })
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error adding streamer: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/guilds/<guild_id>/streamers/<int:streamer_id>", methods=["DELETE"])
+@require_api_key
+def delete_streamer(guild_id: str, streamer_id: int):
+    """Delete a streamer."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM streamers WHERE id = ?",
+            (streamer_id,)
+        )
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Streamer not found"}), 404
+
+        return jsonify({"success": True, "message": "Streamer deleted"})
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error deleting streamer: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+# --- YOUTUBE CHANNELS ENDPOINTS ---
+
+@app.route("/api/guilds/<guild_id>/youtube", methods=["GET"])
+@require_api_key
+def get_youtube_channels(guild_id: str):
+    """Get all YouTube channels for a guild."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, channelId, channelName, discordChannelId, roleId,
+                   notifyVideos, notifyShorts, notifyLive
+            FROM youtube_channels
+            ORDER BY channelName ASC
+            """
+        )
+        channels = [dict(row) for row in cursor.fetchall()]
+
+        return jsonify({
+            "guild_id": guild_id,
+            "youtube_channels": channels
+        })
+    except Exception as e:
+        logger.error(f"Error getting YouTube channels: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/guilds/<guild_id>/youtube", methods=["POST"])
+@require_api_key
+def add_youtube_channel(guild_id: str):
+    """Add a new YouTube channel."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    channel_id = data.get("channelId")
+    channel_name = data.get("channelName", "")
+    discord_channel_id = data.get("discordChannelId")
+    role_id = data.get("roleId")
+    notify_videos = data.get("notifyVideos", True)
+    notify_shorts = data.get("notifyShorts", True)
+    notify_live = data.get("notifyLive", True)
+
+    if not channel_id:
+        return jsonify({"error": "YouTube channel ID is required"}), 400
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO youtube_channels
+            (channelId, channelName, discordChannelId, roleId,
+             notifyVideos, notifyShorts, notifyLive)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                channel_id, channel_name, discord_channel_id, role_id,
+                1 if notify_videos else 0,
+                1 if notify_shorts else 0,
+                1 if notify_live else 0
+            )
+        )
+        conn.commit()
+
+        return jsonify({
+            "success": True,
+            "youtube_channel_id": cursor.lastrowid,
+            "message": "YouTube channel added"
+        })
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error adding YouTube channel: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/guilds/<guild_id>/youtube/<int:channel_id>", methods=["PUT"])
+@require_api_key
+def update_youtube_channel(guild_id: str, channel_id: int):
+    """Update a YouTube channel."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    allowed_fields = {
+        "channelId", "channelName", "discordChannelId", "roleId",
+        "notifyVideos", "notifyShorts", "notifyLive"
+    }
+    safe_data = {k: v for k, v in data.items() if k in allowed_fields}
+
+    if not safe_data:
+        return jsonify({"error": "No valid fields to update"}), 400
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        set_clauses = []
+        values = []
+        for key, value in safe_data.items():
+            set_clauses.append(f"{key} = ?")
+            # Convert booleans to integers for SQLite
+            if isinstance(value, bool):
+                values.append(1 if value else 0)
+            else:
+                values.append(value)
+
+        values.append(channel_id)
+        cursor.execute(
+            f"UPDATE youtube_channels SET {', '.join(set_clauses)} WHERE id = ?",
+            values
+        )
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"error": "YouTube channel not found"}), 404
+
+        return jsonify({"success": True, "message": "YouTube channel updated"})
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error updating YouTube channel: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/guilds/<guild_id>/youtube/<int:channel_id>", methods=["DELETE"])
+@require_api_key
+def delete_youtube_channel(guild_id: str, channel_id: int):
+    """Delete a YouTube channel."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM youtube_channels WHERE id = ?",
+            (channel_id,)
+        )
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"error": "YouTube channel not found"}), 404
+
+        return jsonify({"success": True, "message": "YouTube channel deleted"})
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error deleting YouTube channel: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+# --- MINIGAME SETTINGS ENDPOINTS ---
+
+@app.route("/api/guilds/<guild_id>/minigame-settings", methods=["GET"])
+@require_api_key
+def get_minigame_settings(guild_id: str):
+    """Get minigame settings for a guild."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM guild_settings WHERE guildId = ?",
+            (guild_id,)
+        )
+        settings = cursor.fetchone()
+
+        if settings:
+            return jsonify({
+                "guild_id": guild_id,
+                "settings": dict(settings)
+            })
+        else:
+            return jsonify({
+                "guild_id": guild_id,
+                "settings": {
+                    "minigame_enabled": 1,
+                    "minigame_channel_id": None,
+                    "xp_trading_enabled": 1,
+                    "trade_tax_percent": 10.0,
+                    "duel_tax_percent": 10.0,
+                    "capture_cooldown_seconds": 60,
+                    "duel_cooldown_seconds": 300
+                }
+            })
+    except Exception as e:
+        logger.error(f"Error getting minigame settings: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/guilds/<guild_id>/minigame-settings", methods=["POST"])
+@require_api_key
+def update_minigame_settings(guild_id: str):
+    """Update minigame settings for a guild."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    allowed_fields = {
+        "minigame_enabled", "minigame_channel_id", "xp_trading_enabled",
+        "trade_tax_percent", "duel_tax_percent", "daily_xp_transfer_cap_percent",
+        "daily_xp_transfer_cap_max", "capture_cooldown_seconds", "duel_cooldown_seconds"
+    }
+    safe_data = {k: v for k, v in data.items() if k in allowed_fields}
+
+    if not safe_data:
+        return jsonify({"error": "No valid fields to update"}), 400
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        # Ensure record exists
+        cursor.execute(
+            "INSERT OR IGNORE INTO guild_settings (guildId) VALUES (?)",
+            (guild_id,)
+        )
+
+        set_clauses = []
+        values = []
+        for key, value in safe_data.items():
+            set_clauses.append(f"{key} = ?")
+            if isinstance(value, bool):
+                values.append(1 if value else 0)
+            else:
+                values.append(value)
+
+        values.append(guild_id)
+        cursor.execute(
+            f"UPDATE guild_settings SET {', '.join(set_clauses)}, "
+            f"updated_at = ? WHERE guildId = ?",
+            values[:-1] + [datetime.now(timezone.utc).isoformat(), guild_id]
+        )
+        conn.commit()
+
+        return jsonify({"success": True, "message": "Minigame settings updated"})
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error updating minigame settings: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
 # --- HEALTH CHECK ---
 
 @app.route("/api/health", methods=["GET"])
