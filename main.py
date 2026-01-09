@@ -202,6 +202,17 @@ class ISROBOT(commands.Bot):
         
         # Démarrer la tâche de nettoyage du rate limiter
         self.rate_limit_cleanup_task = self.loop.create_task(self.rate_limit_cleanup_loop())
+        
+        # Démarrer le serveur API si activé
+        if os.getenv("API_ENABLED", "false").lower() == "true":
+            try:
+                from api import run_api_server
+                api_port = int(os.getenv("API_PORT", "5000"))
+                self.api_thread = run_api_server(port=api_port)
+                print(f"🌐 API server started on port {api_port}")
+            except Exception as e:
+                print(f"⚠️ Failed to start API server: {e}")
+                logger.error(f"Failed to start API server: {e}")
 
     async def check_streams_loop(self):
         """Vérifier périodiquement le statut des streamers."""

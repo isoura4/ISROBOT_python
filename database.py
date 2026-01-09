@@ -284,6 +284,164 @@ def create_database():
     """
     )
 
+    # --- ENGAGEMENT SYSTEM TABLES ---
+
+    # Configuration d'engagement par serveur
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS engagement_config (
+            guild_id TEXT PRIMARY KEY,
+            xp_per_message INTEGER DEFAULT 1,
+            welcome_bonus_xp INTEGER DEFAULT 10,
+            welcome_detection_enabled INTEGER DEFAULT 1,
+            announcements_channel_id TEXT,
+            ambassador_role_id TEXT,
+            new_member_role_id TEXT,
+            new_member_role_duration_days INTEGER DEFAULT 7,
+            welcome_dm_enabled INTEGER DEFAULT 1,
+            welcome_dm_text TEXT DEFAULT 'Bienvenue sur le serveur ! 🎉
+
+**Guide de démarrage:**
+1. 📋 Consultez les règles du serveur
+2. 🎭 Choisissez vos rôles
+3. 👋 Présentez-vous dans le salon approprié
+4. 🔍 Explorez les différents salons
+
+N''hésitez pas à poser des questions !',
+            welcome_public_text TEXT DEFAULT 'Bienvenue {user} sur le serveur ! 🎉',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+    )
+
+    # Paliers XP et rôles associés
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS xp_thresholds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            threshold_points INTEGER NOT NULL,
+            role_id TEXT NOT NULL,
+            role_name TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(guild_id, threshold_points)
+        )
+    """
+    )
+
+    # Index pour les seuils XP
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_xp_thresholds_guild 
+        ON xp_thresholds(guild_id, threshold_points)
+    """
+    )
+
+    # Challenges hebdomadaires
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS weekly_challenges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            reward_xp INTEGER DEFAULT 100,
+            reward_role_id TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+    )
+
+    # Historique des challenges lancés
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS challenge_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            challenge_id INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            ended_at TEXT,
+            message_id TEXT,
+            FOREIGN KEY(challenge_id) REFERENCES weekly_challenges(id)
+        )
+    """
+    )
+
+    # Membres temporaires (pour le rôle "Nouveau")
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS temp_member_roles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            role_id TEXT NOT NULL,
+            assigned_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            UNIQUE(guild_id, user_id, role_id)
+        )
+    """
+    )
+
+    # Index pour les rôles temporaires expirés
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_temp_roles_expires 
+        ON temp_member_roles(expires_at)
+    """
+    )
+
+    # Rappels d'événements envoyés
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS event_reminders_sent (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            event_id TEXT NOT NULL,
+            reminder_type TEXT NOT NULL,
+            sent_at TEXT NOT NULL,
+            UNIQUE(guild_id, event_id, reminder_type)
+        )
+    """
+    )
+
+    # Statistiques de messages par canal (pour analytics)
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS channel_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            date TEXT NOT NULL,
+            message_count INTEGER DEFAULT 0,
+            UNIQUE(guild_id, channel_id, date)
+        )
+    """
+    )
+
+    # Index pour les stats de canaux
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_channel_stats_guild_date 
+        ON channel_stats(guild_id, date)
+    """
+    )
+
+    # Historique de croissance des membres
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS member_growth (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            date TEXT NOT NULL,
+            member_count INTEGER NOT NULL,
+            joins_today INTEGER DEFAULT 0,
+            leaves_today INTEGER DEFAULT 0,
+            UNIQUE(guild_id, date)
+        )
+    """
+    )
+
     conn.commit()
     conn.close()
 
