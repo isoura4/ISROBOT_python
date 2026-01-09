@@ -14,3 +14,10 @@ utils/__pycache__
 # Backup files
 backups/
 *.sqlite3.bak
+
+# Dashboard (Next.js)
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/.env.local
+dashboard/.env
