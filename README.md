@@ -144,8 +144,48 @@ ISROBOT_python/
 - `/level [user]` - Display level information for yourself or another user
 - `/leaderboard` - Show the server's XP leaderboard
 
+### Minigame Commands
+All minigame commands must be run in the designated minigame channel (set by an admin).
+
+> **Note:** The minigame system can be enabled/disabled per-server with `/minigame enable` and `/minigame disable`, or globally via the `.env` file by setting `minigame_enabled=false`.
+
+#### Economy & Wallet
+- `/wallet` - View your coins, XP, and level
+- `/history [type]` - View recent transactions (filter by type: all, quests, shop, trades, captures, duels)
+- `/inventory` - View items in your inventory
+
+#### Daily Quests
+- `/daily claim` - Claim your daily quests (assigns new quests if none exist)
+- `/daily status` - View progress on your current daily quests
+
+#### Quest Management
+- `/quest list` - List all your active quests and their progress
+- `/quest claim [quest_id]` - Claim rewards for completed quests
+
+#### Shop System
+- `/shop list` - View available shop items
+- `/shop buy <item_id> [quantity]` - Purchase an item from the shop
+
+#### Trading System
+- `/trade offer @user --coins X --xp Y` - Send a trade offer to another player
+- `/trade accept <trade_id>` - Accept a pending trade offer
+- `/trade cancel <trade_id>` - Cancel a pending or escrowed trade
+- `/trade pending` - View your pending trades (sent and received)
+
+#### Minigames
+- `/capture <stake>` - Stake coins for a chance to win more (10-1000 coins)
+- `/duel @opponent <bet>` - Challenge another player to a duel (10-500 coins each)
+- `/stats` - View your capture and duel statistics
+
 ### Administrative Commands (Admin Only)
 - `/count <channel>` - Set up the counter mini-game in a specific channel
+- `/minigame enable` - Enable the minigame system for this server
+- `/minigame disable` - Disable the minigame system for this server
+- `/minigame set-channel <channel>` - Set the minigame channel for this server
+- `/minigame clear-channel` - Remove the minigame channel restriction
+- `/minigame allow-channel <channel>` - Add a quest exception channel
+- `/minigame remove-channel <channel>` - Remove a quest exception channel
+- `/minigame stats` - View minigame configuration and statistics
 - `/stream_add <streamer_name> <channel>` - Add a streamer to the notification list
 - `/stream_remove <streamer_name>` - Remove a streamer from the notification list
 - `/youtube_add <channel_id_or_handle> <channel> [notify_videos] [notify_shorts] [ping_role]` - Add a YouTube channel to monitor (accepts channel ID or @handle)
@@ -194,7 +234,20 @@ The bot uses SQLite with the following tables:
 - Stores counter game configuration per server
 - Tracks current count and last user
 
-### Moderation Tables (NEW)
+### Minigame Tables
+- **guild_settings** - Per-guild configuration (minigame channel, taxes, limits)
+- **quest_exception_channels** - Channels where quest actions are allowed
+- **quests** - Quest templates (daily, random, event types)
+- **user_quests** - User's assigned quests and progress
+- **user_daily_tracking** - Daily streaks and XP transfer limits
+- **shop_items** - Available shop items with prices and effects
+- **user_inventory** - User's owned consumable items
+- **user_active_effects** - Currently active item effects
+- **trades** - P2P trade records with escrow status
+- **transactions** - Complete transaction ledger for auditing
+- **user_cooldowns** - Action cooldowns (capture, duel)
+
+### Moderation Tables
 - **Warnings**: Current warning count per user per guild
 - **Warning History**: Immutable audit trail of all moderation actions
 - **Moderation Appeals**: User appeal submissions and moderator decisions
@@ -269,6 +322,62 @@ Users must count sequentially starting from 1. Rules:
   - Output filtering to block inappropriate responses
   - Compliance with server rules and community guidelines
 
+### Minigame System
+
+The minigame system provides a comprehensive economy with quests, trading, and gambling features.
+
+#### Channel Restriction
+- All minigame commands require a designated minigame channel
+- Admins set the channel with `/minigame set-channel #channel`
+- Exception channels can be added for quest tracking in other channels
+
+#### Daily Quests
+- Users receive 1 guaranteed + up to 2 random quests daily
+- Streak bonuses: 7 days = 1.5x, 14 days = 2.0x, 30 days = 2.5x rewards
+- Quest types: messages_sent, counting_participation, coinflip_used, capture_attempt, etc.
+
+#### Shop System
+- Items can cost coins, XP, or both
+- Consumable items are stored in user inventory
+- Effects: XP boosts, capture luck, quest rerolls, trade fee waivers
+
+#### Trading System
+- P2P trades for coins and XP
+- Escrow period (5 minutes) before completion
+- Tax on trades (default 10%)
+- Daily XP transfer limits (10% of user XP or 500, whichever is lower)
+- Confirmation required for trades that would cause level loss
+
+#### Capture Game
+- Stake 10-1000 coins per attempt
+- Success odds based on XP level and stake amount (30-65%)
+- Winners get 2x stake + bonus, losers get consolation XP
+- 60-second cooldown between attempts
+
+#### Arena Duels
+- Both players bet equal amounts (10-500 coins each)
+- Winner takes pot minus tax (default 10%)
+- Odds based on level difference (up to ±20% advantage)
+- 5-minute cooldown for challenger
+
+#### Configuration Defaults
+- Trade tax: 10%
+- Duel tax: 10%
+- Daily XP transfer cap: 10% of user XP or 500 max
+- Capture cooldown: 60 seconds
+- Duel cooldown: 300 seconds
+
+#### Running Migrations
+To set up the minigame tables, run:
+```bash
+python db_migrations.py
+```
+
+This will:
+1. Create a backup of the database
+2. Remove the legacy 'corners' column from users table
+3. Create all minigame tables
+4. Seed default quests and shop items
 ## Moderation System
 
 The comprehensive moderation system provides advanced tools for server management with AI assistance.

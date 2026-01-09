@@ -5,3 +5,6 @@ test.py
 *.pyc
 __pycache__
 commands/__pycache__
+tests/__pycache__
+.pytest_cache/
+*.bak
