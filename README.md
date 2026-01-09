@@ -18,7 +18,7 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 - **Leaderboard**: View server rankings based on levels and XP
 - **Profile Command**: Check your or another user's level, XP, and message count
 
-### �🎥 Twitch Integration
+### 🎥 Twitch Integration
 - **Stream Notifications**: Automatically announce when configured streamers go live
 - **Stream Management**: Add streamers to watch list with custom notification channels
 - **Rich Embeds**: Beautiful stream announcements with thumbnails and stream details
@@ -35,7 +35,7 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 - **Configuration Commands**: Set up mini-games and stream notifications
 - **Permissions**: Admin-only commands for server management
 
-### 🛡️ Moderation System (NEW)
+### 🛡️ Moderation System 
 - **Smart Warning System**: Issue warnings with automatic escalation
   - Intelligent warning decay based on warn count
   - Automatic muting at 2 and 3 warnings
