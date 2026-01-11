@@ -112,6 +112,11 @@ class ISROBOT(commands.Bot):
         # limited to one per guild, so memory impact is minimal
         self._counter_locks: dict[tuple[str, str], asyncio.Lock] = {}
 
+    def _get_counter_lock(self, guild_id: str, channel_id: str) -> asyncio.Lock:
+        """Get or create a lock for the counter game in a specific guild/channel."""
+        key = (guild_id, channel_id)
+        return self._counter_locks.setdefault(key, asyncio.Lock())
+
     async def setup_hook(self):
         # Créer une session HTTP pour les requêtes API avec timeout
         timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=15)
