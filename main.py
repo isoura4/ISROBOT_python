@@ -50,8 +50,15 @@ if is_setup_required():
     print("=" * 60 + "\n")
 
     from setup_wizard import run_setup_wizard
-    run_setup_wizard()
-    sys.exit(0)
+    setup_completed = run_setup_wizard()
+    
+    if setup_completed:
+        # Restart main.py to load the new configuration
+        print("\n🔄 Redémarrage automatique avec la nouvelle configuration...")
+        print("=" * 60 + "\n")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    else:
+        sys.exit(0)
 
 import database
 

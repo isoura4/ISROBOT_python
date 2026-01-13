@@ -668,10 +668,8 @@ SETUP_HTML = """
                     document.querySelectorAll('.step')[1].classList.add('active');
                     document.querySelectorAll('.step')[2].classList.add('active');
 
-                    // Redirect after 3 seconds with dashboard port
-                    setTimeout(() => {
-                        window.location.href = '/complete?dashboard_port=' + data.dashboard_port;
-                    }, 3000);
+                    // No redirect - server will shutdown and bot will restart automatically
+                    // Just show success message
                 } else {
                     showAlert(result.error || 'Une erreur est survenue', 'error');
                     submitBtn.disabled = false;
@@ -961,6 +959,9 @@ MAX_BACKUPS=10
         setup_complete_file = BASE_DIR / ".setup_complete"
         setup_complete_file.touch()
 
+        # Trigger server shutdown after response is sent
+        shutdown_server()
+
         return jsonify({"success": True})
 
     except Exception as e:
@@ -1001,13 +1002,25 @@ def is_setup_required():
         return True
 
 
+# Global flag to track setup completion
+_setup_completed = False
+
+
 def run_setup_wizard(port=8080):
-    """Run the setup wizard web server."""
+    """
+    Run the setup wizard web server.
+
+    Returns:
+        bool: True if setup completed successfully, False otherwise
+    """
+    global _setup_completed
+    _setup_completed = False
+
     print("\n" + "=" * 60)
     print("🤖 ISROBOT - Assistant de Configuration")
     print("=" * 60)
     print("\n📋 Le fichier .env n'est pas configuré.")
-    print("🌐 Ouverture de l'assistant de configuration dans votre navigateur...")
+    print("🌐 Ouverture de l'assistant de configuration...")
     print(f"\n   URL: http://localhost:{port}")
     print("\n   (Appuyez sur Ctrl+C pour annuler)")
     print("=" * 60 + "\n")
@@ -1020,12 +1033,42 @@ def run_setup_wizard(port=8080):
 
     threading.Thread(target=open_browser, daemon=True).start()
 
-    # Run Flask server
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    # Run Flask server with shutdown capability
+    from werkzeug.serving import make_server
+
+    server = make_server("0.0.0.0", port, app, threaded=True)
+
+    # Store server reference for shutdown
+    app.config['server'] = server
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+    return _setup_completed
+
+
+def shutdown_server():
+    """Shutdown the Flask server."""
+    global _setup_completed
+    _setup_completed = True
+
+    server = app.config.get('server')
+    if server:
+        # Schedule shutdown in a separate thread to allow response to complete
+        def do_shutdown():
+            import time
+            time.sleep(0.5)
+            server.shutdown()
+
+        threading.Thread(target=do_shutdown, daemon=True).start()
 
 
 if __name__ == "__main__":
     if is_setup_required():
-        run_setup_wizard()
+        completed = run_setup_wizard()
+        if completed:
+            print("✅ Configuration terminée!")
     else:
-        print("✅ Configuration déjà effectuée. Utilisez 'python main.py' pour démarrer le bot.")
+        print("✅ Configuration effectuée. Lancez 'python main.py'.")
