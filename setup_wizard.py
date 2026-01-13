@@ -527,14 +527,20 @@ SETUP_HTML = """
                 <div id="api-section" class="collapsible show">
                     <div class="row">
                         <div class="form-group">
-                            <label for="api_port">Port API</label>
-                            <input type="number" id="api_port" name="api_port" value="5000" placeholder="5000">
+                            <label for="dashboard_port">Port du Dashboard</label>
+                            <input type="number" id="dashboard_port" name="dashboard_port" value="3000" placeholder="3000">
+                            <small>Port du panneau web (interface Next.js)</small>
                         </div>
                         <div class="form-group">
-                            <label for="api_secret">Clé secrète API</label>
-                            <input type="text" id="api_secret" name="api_secret" placeholder="Généré automatiquement">
-                            <small>Laissez vide pour générer automatiquement</small>
+                            <label for="api_port">Port API Backend</label>
+                            <input type="number" id="api_port" name="api_port" value="5000" placeholder="5000">
+                            <small>Port de l'API Flask (communication bot↔dashboard)</small>
                         </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label for="api_secret">Clé secrète API</label>
+                        <input type="text" id="api_secret" name="api_secret" placeholder="Généré automatiquement">
+                        <small>Laissez vide pour générer automatiquement</small>
                     </div>
                 </div>
             </div>
@@ -637,6 +643,7 @@ SETUP_HTML = """
 
                 // API/Dashboard
                 api_enabled: document.getElementById('api_enabled').checked,
+                dashboard_port: form.dashboard_port.value || '3000',
                 api_port: form.api_port.value || '5000',
                 api_secret: form.api_secret.value.trim() || generateSecret(),
 
@@ -661,9 +668,9 @@ SETUP_HTML = """
                     document.querySelectorAll('.step')[1].classList.add('active');
                     document.querySelectorAll('.step')[2].classList.add('active');
 
-                    // Redirect after 3 seconds
+                    // Redirect after 3 seconds with dashboard port
                     setTimeout(() => {
-                        window.location.href = '/complete';
+                        window.location.href = '/complete?dashboard_port=' + data.dashboard_port;
                     }, 3000);
                 } else {
                     showAlert(result.error || 'Une erreur est survenue', 'error');
@@ -705,16 +712,86 @@ COMPLETE_HTML = """
         .container {
             text-align: center;
             padding: 3rem;
+            max-width: 600px;
         }
         .icon { font-size: 5rem; margin-bottom: 1rem; }
         h1 { color: #43b581; margin-bottom: 1rem; }
         p { color: #b9bbbe; margin-bottom: 0.5rem; }
-        .code {
+        .steps {
             background: #0f3460;
-            padding: 1rem;
-            border-radius: 8px;
+            padding: 1.5rem;
+            border-radius: 12px;
             margin-top: 2rem;
+            text-align: left;
+        }
+        .step {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .step:last-child {
+            border-bottom: none;
+        }
+        .step-number {
+            background: #5865F2;
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .step-content h3 {
+            margin: 0 0 0.5rem 0;
+            color: #fff;
+            font-size: 1rem;
+        }
+        .step-content p {
+            margin: 0;
+            font-size: 0.9rem;
+        }
+        .code {
+            background: #16213e;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
             font-family: monospace;
+            display: inline-block;
+            margin-top: 0.5rem;
+            color: #5865F2;
+        }
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background: #5865F2;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            margin-top: 1.5rem;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        .btn:hover {
+            background: #4752c4;
+        }
+        .info-box {
+            background: rgba(88, 101, 242, 0.2);
+            border: 1px solid #5865F2;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1.5rem;
+            text-align: left;
+        }
+        .info-box h4 {
+            margin: 0 0 0.5rem 0;
+            color: #5865F2;
+        }
+        .info-box p {
+            margin: 0;
         }
     </style>
 </head>
@@ -723,9 +800,37 @@ COMPLETE_HTML = """
         <div class="icon">🎉</div>
         <h1>Configuration terminée !</h1>
         <p>Le fichier .env a été créé avec succès.</p>
-        <p>Vous pouvez maintenant fermer cette fenêtre et redémarrer le bot.</p>
-        <div class="code">
-            python main.py
+
+        <div class="steps">
+            <div class="step">
+                <span class="step-number">1</span>
+                <div class="step-content">
+                    <h3>Relancer le bot</h3>
+                    <p>Fermez ce terminal et exécutez :</p>
+                    <div class="code">python main.py</div>
+                </div>
+            </div>
+            <div class="step">
+                <span class="step-number">2</span>
+                <div class="step-content">
+                    <h3>Lancer le Dashboard (optionnel)</h3>
+                    <p>Dans un nouveau terminal :</p>
+                    <div class="code">cd dashboard && npm install && npm run dev</div>
+                </div>
+            </div>
+            <div class="step">
+                <span class="step-number">3</span>
+                <div class="step-content">
+                    <h3>Accéder au Dashboard</h3>
+                    <p>Ouvrez votre navigateur sur :</p>
+                    <div class="code" id="dashboard-url">http://localhost:3000</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <h4>💡 Astuce</h4>
+            <p>Le bot doit être en cours d'exécution (<code>python main.py</code>) pour que le dashboard fonctionne.</p>
         </div>
     </div>
 </body>
@@ -810,9 +915,10 @@ AI_CONTENT_FILTER_ENABLED={'true' if data.get('ai_enabled') else 'false'}
 # ============================================================================
 
 API_ENABLED={'true' if data.get('api_enabled') else 'false'}
+DASHBOARD_PORT={data.get('dashboard_port', '3000')}
 API_PORT={data.get('api_port', '5000')}
 API_SECRET={data.get('api_secret', 'change-me-in-production')}
-DASHBOARD_ORIGINS=http://localhost:3000
+DASHBOARD_ORIGINS=http://localhost:{data.get('dashboard_port', '3000')}
 
 # ============================================================================
 # MINIJEUX
@@ -854,7 +960,13 @@ MAX_BACKUPS=10
 @app.route("/complete")
 def complete():
     """Display completion page."""
-    return render_template_string(COMPLETE_HTML)
+    dashboard_port = request.args.get('dashboard_port', '3000')
+    # Replace the placeholder in the HTML with the actual port
+    html = COMPLETE_HTML.replace(
+        'http://localhost:3000',
+        f'http://localhost:{dashboard_port}'
+    )
+    return render_template_string(html)
 
 
 def is_setup_required():
