@@ -14,6 +14,45 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
+# Check if setup wizard is needed before loading environment
+BASE_DIR = Path(__file__).parent.resolve()
+ENV_FILE = BASE_DIR / ".env"
+
+
+def is_setup_required():
+    """Check if initial setup is required."""
+    if not ENV_FILE.exists():
+        return True
+
+    # Try to load and validate the .env
+    try:
+        from dotenv import dotenv_values
+        config = dotenv_values(ENV_FILE)
+
+        required = ["app_id", "secret_key", "server_id"]
+        for key in required:
+            value = config.get(key, "")
+            if not value or value.startswith("VOTRE_") or value == "123456789012345678":
+                return True
+
+        return False
+    except Exception:
+        return True
+
+
+# Launch setup wizard if needed
+if is_setup_required():
+    print("\n" + "=" * 60)
+    print("🤖 ISROBOT - Configuration initiale requise")
+    print("=" * 60)
+    print("\n📋 Le fichier .env n'est pas configuré correctement.")
+    print("🌐 Lancement de l'assistant de configuration...")
+    print("=" * 60 + "\n")
+
+    from setup_wizard import run_setup_wizard
+    run_setup_wizard()
+    sys.exit(0)
+
 import database
 
 # Chargement du fichier .env
@@ -35,10 +74,10 @@ def validate_environment_variables():
         "server_id": "L'ID du serveur Discord est requis",
         "db_path": "Le chemin de la base de données est requis",
     }
-    
+
     missing_vars = []
     invalid_vars = []
-    
+
     for var_name, error_msg in required_vars.items():
         value = os.getenv(var_name)
         if not value:
@@ -51,14 +90,14 @@ def validate_environment_variables():
                     invalid_vars.append(f"  - {var_name}: Doit être un nombre positif")
             except ValueError:
                 invalid_vars.append(f"  - {var_name}: Doit être un nombre valide")
-    
+
     if missing_vars or invalid_vars:
         error_message = "❌ Erreur de configuration:\n"
         if missing_vars:
             error_message += "\nVariables manquantes:\n" + "\n".join(missing_vars)
         if invalid_vars:
             error_message += "\nVariables invalides:\n" + "\n".join(invalid_vars)
-        error_message += "\n\nVeuillez vérifier votre fichier .env et vous assurer que toutes les variables requises sont définies correctement."
+        error_message += "\n\nVeuillez vérifier votre fichier .env."
         raise ValueError(error_message)
 
 
