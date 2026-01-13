@@ -779,8 +779,8 @@ COMPLETE_HTML = """
             background: #4752c4;
         }
         .info-box {
-            background: rgba(88, 101, 242, 0.2);
-            border: 1px solid #5865F2;
+            background: rgba(67, 181, 129, 0.2);
+            border: 1px solid #43b581;
             border-radius: 8px;
             padding: 1rem;
             margin-top: 1.5rem;
@@ -788,10 +788,22 @@ COMPLETE_HTML = """
         }
         .info-box h4 {
             margin: 0 0 0.5rem 0;
-            color: #5865F2;
+            color: #43b581;
         }
         .info-box p {
             margin: 0;
+        }
+        .warning-box {
+            background: rgba(250, 166, 26, 0.2);
+            border: 1px solid #faa61a;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            text-align: left;
+        }
+        .warning-box h4 {
+            margin: 0 0 0.5rem 0;
+            color: #faa61a;
         }
     </style>
 </head>
@@ -806,31 +818,29 @@ COMPLETE_HTML = """
                 <span class="step-number">1</span>
                 <div class="step-content">
                     <h3>Relancer le bot</h3>
-                    <p>Fermez ce terminal et exécutez :</p>
+                    <p>Fermez cette fenêtre et exécutez :</p>
                     <div class="code">python main.py</div>
                 </div>
             </div>
             <div class="step">
                 <span class="step-number">2</span>
                 <div class="step-content">
-                    <h3>Lancer le Dashboard (optionnel)</h3>
-                    <p>Dans un nouveau terminal :</p>
-                    <div class="code">cd dashboard && npm install && npm run dev</div>
-                </div>
-            </div>
-            <div class="step">
-                <span class="step-number">3</span>
-                <div class="step-content">
-                    <h3>Accéder au Dashboard</h3>
-                    <p>Ouvrez votre navigateur sur :</p>
+                    <h3>C'est tout !</h3>
+                    <p>Le bot ET le dashboard démarreront automatiquement.</p>
+                    <p style="margin-top: 0.5rem;">Dashboard accessible sur :</p>
                     <div class="code" id="dashboard-url">http://localhost:3000</div>
                 </div>
             </div>
         </div>
 
         <div class="info-box">
-            <h4>💡 Astuce</h4>
-            <p>Le bot doit être en cours d'exécution (<code>python main.py</code>) pour que le dashboard fonctionne.</p>
+            <h4>✅ Tout est automatique</h4>
+            <p>En lançant <code>python main.py</code>, le bot démarre le serveur API et le dashboard web automatiquement. Plus besoin de commandes npm !</p>
+        </div>
+
+        <div class="warning-box">
+            <h4>⚠️ Prérequis pour le dashboard</h4>
+            <p>Node.js doit être installé sur votre machine. Si ce n'est pas le cas, installez-le depuis <a href="https://nodejs.org/" target="_blank" style="color: #faa61a;">nodejs.org</a></p>
         </div>
     </div>
 </body>

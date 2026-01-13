@@ -75,19 +75,22 @@ L'assistant de configuration permet de configurer :
 
 Le dashboard web permet de **gérer toutes les fonctionnalités** du bot sans commandes Discord.
 
-### Activer le Dashboard
+### Démarrage Automatique ✨
 
-Le dashboard est activé automatiquement si vous l'avez coché dans l'assistant de configuration.
-
-Pour lancer le serveur web du dashboard :
+Le dashboard démarre **automatiquement** avec le bot ! Pas besoin de commandes npm.
 
 ```bash
-cd dashboard
-npm install
-npm run dev
+python main.py
 ```
 
+Le bot démarre :
+- ✅ Le serveur Discord
+- ✅ L'API REST (port 5000 par défaut)
+- ✅ Le dashboard web (port 3000 par défaut)
+
 Le dashboard sera accessible sur http://localhost:3000
+
+> **Prérequis** : Node.js doit être installé sur votre machine. [Télécharger Node.js](https://nodejs.org/)
 
 ### Fonctionnalités du Dashboard
 
@@ -210,6 +213,7 @@ ISROBOT_python/
 ├── main.py              # Point d'entrée principal
 ├── setup_wizard.py      # Assistant de configuration web
 ├── api.py               # API REST pour le dashboard
+├── dashboard_manager.py # Gestionnaire automatique du dashboard
 ├── database.py          # Gestion base de données
 ├── requirements.txt     # Dépendances Python
 ├── .env                 # Configuration (généré par l'assistant)

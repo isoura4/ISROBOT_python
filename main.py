@@ -242,7 +242,7 @@ class ISROBOT(commands.Bot):
         # Démarrer la tâche de nettoyage du rate limiter
         self.rate_limit_cleanup_task = self.loop.create_task(self.rate_limit_cleanup_loop())
         
-        # Démarrer le serveur API si activé
+        # Démarrer le serveur API et le dashboard si activés
         if os.getenv("API_ENABLED", "false").lower() == "true":
             try:
                 from api import run_api_server
@@ -252,6 +252,16 @@ class ISROBOT(commands.Bot):
             except Exception as e:
                 print(f"⚠️ Failed to start API server: {e}")
                 logger.error(f"Failed to start API server: {e}")
+            
+            # Démarrer le dashboard web automatiquement
+            try:
+                from dashboard_manager import run_dashboard_in_background
+                dashboard_port = int(os.getenv("DASHBOARD_PORT", "3000"))
+                self.dashboard_process = run_dashboard_in_background(port=dashboard_port)
+            except Exception as e:
+                print(f"⚠️ Dashboard non démarré: {e}")
+                logger.warning(f"Dashboard could not be started: {e}")
+                self.dashboard_process = None
 
     async def check_streams_loop(self):
         """Vérifier périodiquement le statut des streamers."""
@@ -1331,6 +1341,16 @@ class ISROBOT(commands.Bot):
         # Arrêter la tâche de nettoyage du rate limiter
         if hasattr(self, "rate_limit_cleanup_task"):
             self.rate_limit_cleanup_task.cancel()
+        
+        # Arrêter le dashboard web
+        if hasattr(self, "dashboard_process") and self.dashboard_process:
+            try:
+                from dashboard_manager import stop_dashboard
+                logger.info("Arrêt du dashboard web...")
+                stop_dashboard(self.dashboard_process)
+                logger.info("Dashboard web arrêté")
+            except Exception as e:
+                logger.error(f"Erreur lors de l'arrêt du dashboard: {e}")
 
         if self.session:
             await self.session.close()
