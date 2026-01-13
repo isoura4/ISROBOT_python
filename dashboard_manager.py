@@ -68,8 +68,9 @@ def install_npm_dependencies() -> bool:
     logger.info("Installing npm dependencies for dashboard...")
 
     try:
+        # Use --legacy-peer-deps to avoid peer dependency conflicts
         result = subprocess.run(
-            ["npm", "install"],
+            ["npm", "install", "--legacy-peer-deps"],
             cwd=DASHBOARD_DIR,
             capture_output=True,
             text=True,
