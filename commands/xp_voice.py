@@ -7,8 +7,13 @@ import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
+from utils.logging_config import get_logger
+
 # Chargement du fichier .env
 load_dotenv()
+
+# Configure logging for this module
+logger = get_logger(__name__)
 
 # Récupération des variables d'environnement
 SERVER_ID = int(os.getenv("server_id", "0"))
@@ -179,7 +184,7 @@ class VoiceXP(commands.Cog):
                 try:
                     self.add_voice_xp(guild_id, user_id, total_xp)
                 except Exception as e:
-                    print(
+                    logger.error(
                         f"Erreur lors de l'attribution d'XP vocal à {user_id} sur {guild_id}: {e}"
                     )
                     continue

@@ -1,7 +1,19 @@
 .env
 discord.log
+discord.log.*
 database.sqlite3
 test.py
 *.pyc
 __pycache__
 commands/__pycache__
+tests/__pycache__
+utils/__pycache__
+.pytest_cache/
+*.bak
+
+# Backup files
+backups/
+*.sqlite3.bak
+
+# SQLite in-memory database artifacts
+:memory:
