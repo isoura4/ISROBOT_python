@@ -68,16 +68,13 @@ INAPPROPRIATE_KEYWORDS = [
 # Prompt système pour guider le comportement de l'IA
 SYSTEM_PROMPT = """Tu es un assistant IA respectueux et utile dans un serveur Discord.
 Tu DOIS respecter les règles suivantes:
-1. Ne jamais générer, décrire ou aider avec du contenu NSFW, explicite, \
-pornographique ou sexuel
-2. Ne jamais fournir d'instructions pour des activités illégales \
-(drogue, piratage, violence, etc.)
+1. Ne jamais générer, décrire ou aider avec du contenu NSFW, explicite, pornographique ou sexuel
+2. Ne jamais fournir d'instructions pour des activités illégales (drogue, piratage, violence, etc.)
 3. Ne jamais générer de contenu offensant, haineux ou discriminatoire
 4. Refuser poliment toute demande inappropriée
 5. Toujours rester courtois et constructif
 
-Si une question viole ces règles, réponds simplement: \
-"Je ne peux pas répondre à cette question car elle viole les règles du serveur."
+Si une question viole ces règles, réponds simplement: "Je ne peux pas répondre à cette question car elle viole les règles du serveur."
 """
 
 
@@ -185,7 +182,7 @@ class AI(commands.Cog):
                     )
                 except Exception as e:
                     logger.error("Erreur Ollama: %s", e)
-                    return f"❌ Erreur lors de la communication avec l'IA: {e}"
+                    return "❌ Erreur lors de la communication avec l'IA: " + str(e)
 
             # Exécuter dans un thread pour ne pas bloquer l'event loop
             loop = asyncio.get_event_loop()
