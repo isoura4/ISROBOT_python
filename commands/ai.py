@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import re
 
@@ -10,6 +11,9 @@ from dotenv import load_dotenv
 
 # Chargement du fichier .env
 load_dotenv()
+
+# Logger pour ce module
+logger = logging.getLogger(__name__)
 
 # Récupération des variables d'environnement
 SERVER_ID = int(os.getenv("server_id", "0"))
@@ -64,13 +68,16 @@ INAPPROPRIATE_KEYWORDS = [
 # Prompt système pour guider le comportement de l'IA
 SYSTEM_PROMPT = """Tu es un assistant IA respectueux et utile dans un serveur Discord.
 Tu DOIS respecter les règles suivantes:
-1. Ne jamais générer, décrire ou aider avec du contenu NSFW, explicite, pornographique ou sexuel
-2. Ne jamais fournir d'instructions pour des activités illégales (drogue, piratage, violence, etc.)
+1. Ne jamais générer, décrire ou aider avec du contenu NSFW, explicite, \
+pornographique ou sexuel
+2. Ne jamais fournir d'instructions pour des activités illégales \
+(drogue, piratage, violence, etc.)
 3. Ne jamais générer de contenu offensant, haineux ou discriminatoire
 4. Refuser poliment toute demande inappropriée
 5. Toujours rester courtois et constructif
 
-Si une question viole ces règles, réponds simplement: "Je ne peux pas répondre à cette question car elle viole les règles du serveur."
+Si une question viole ces règles, réponds simplement: \
+"Je ne peux pas répondre à cette question car elle viole les règles du serveur."
 """
 
 
@@ -109,13 +116,14 @@ class AI(commands.Cog):
                     "❌ La question ne peut pas être vide.", ephemeral=True
                 )
                 return
-            
+
             question = question.strip()
-            
+
             # Limiter la longueur de la question pour éviter les abus
             if len(question) > 500:
                 await interaction.followup.send(
-                    "❌ Votre question est trop longue. Veuillez la limiter à 500 caractères.", 
+                    "❌ Votre question est trop longue. "
+                    "Veuillez la limiter à 500 caractères.",
                     ephemeral=True
                 )
                 return
@@ -124,8 +132,11 @@ class AI(commands.Cog):
             if self.contains_inappropriate_content(question):
                 error_embed = discord.Embed(
                     title="❌ Contenu inapproprié détecté",
-                    description="Votre question contient du contenu qui viole les règles du serveur. "
-                    "Les questions obscènes, illégales ou NSFW ne sont pas autorisées.",
+                    description=(
+                        "Votre question contient du contenu qui viole les "
+                        "règles du serveur. Les questions obscènes, illégales "
+                        "ou NSFW ne sont pas autorisées."
+                    ),
                     color=discord.Color.red(),
                 )
                 error_embed.set_footer(
@@ -161,19 +172,25 @@ class AI(commands.Cog):
                         return None
                     return response["message"]["content"]
                 except ConnectionError as e:
-                    logger.warning(f"Erreur de connexion Ollama: {e}")
-                    return f"❌ Impossible de se connecter au serveur IA. Vérifiez que Ollama est en cours d'exécution."
+                    logger.warning("Erreur de connexion Ollama: %s", e)
+                    return (
+                        "❌ Impossible de se connecter au serveur IA. "
+                        "Vérifiez que Ollama est en cours d'exécution."
+                    )
                 except TimeoutError as e:
-                    logger.warning(f"Timeout Ollama: {e}")
-                    return f"❌ Le serveur IA a mis trop de temps à répondre. Réessayez plus tard."
+                    logger.warning("Timeout Ollama: %s", e)
+                    return (
+                        "❌ Le serveur IA a mis trop de temps à répondre. "
+                        "Réessayez plus tard."
+                    )
                 except Exception as e:
-                    logger.error(f"Erreur Ollama: {e}")
-                    return f"❌ Erreur lors de la communication avec l'IA: {str(e)}"
+                    logger.error("Erreur Ollama: %s", e)
+                    return f"❌ Erreur lors de la communication avec l'IA: {e}"
 
             # Exécuter dans un thread pour ne pas bloquer l'event loop
             loop = asyncio.get_event_loop()
             ai_response = await loop.run_in_executor(None, get_ai_response)
-            
+
             # Vérifier si la réponse est valide
             if ai_response is None:
                 error_embed = discord.Embed(
@@ -183,7 +200,7 @@ class AI(commands.Cog):
                 )
                 await interaction.followup.send(embed=error_embed, ephemeral=True)
                 return
-            
+
             # Vérifier si c'est un message d'erreur
             if ai_response.startswith("❌"):
                 error_embed = discord.Embed(
@@ -198,7 +215,10 @@ class AI(commands.Cog):
             if self.contains_inappropriate_content(ai_response):
                 error_embed = discord.Embed(
                     title="❌ Réponse filtrée",
-                    description="La réponse générée par l'IA a été bloquée car elle pourrait violer les règles du serveur.",
+                    description=(
+                        "La réponse générée par l'IA a été bloquée car elle "
+                        "pourrait violer les règles du serveur."
+                    ),
                     color=discord.Color.red(),
                 )
                 error_embed.set_footer(text="Veuillez reformuler votre question")
@@ -211,7 +231,10 @@ class AI(commands.Cog):
 
             embed.add_field(name="💭 Réponse", value=ai_response, inline=False)
             embed.set_footer(
-                text=f"Modèle: {OLLAMA_MODEL} | Demandé par {interaction.user.display_name}"
+                text=(
+                    f"Modèle: {OLLAMA_MODEL} | "
+                    f"Demandé par {interaction.user.display_name}"
+                )
             )
 
             await interaction.followup.send(embed=embed)

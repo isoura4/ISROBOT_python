@@ -25,10 +25,10 @@ logger = logging.getLogger(__name__)
 def validate_youtube_identifier(identifier: str) -> tuple[bool, str]:
     """
     Valide un identifiant YouTube (handle ou channel ID).
-    
+
     Args:
         identifier: L'identifiant à valider (handle ou channel ID)
-        
+
     Returns:
         tuple: (is_valid, error_message) - is_valid est True si valide, error_message contient le message d'erreur si invalide
     """
@@ -37,7 +37,7 @@ def validate_youtube_identifier(identifier: str) -> tuple[bool, str]:
         # Les handles YouTube peuvent contenir des lettres, chiffres, tirets, underscores et points
         if len(identifier) < 2:
             return False, "❌ Format de handle invalide. Le handle est trop court."
-        
+
         handle_part = identifier[1:]
         # Regex pour valider: lettres, chiffres, tirets, underscores, points
         if not re.match(r'^[a-zA-Z0-9._-]+$', handle_part):
@@ -46,7 +46,7 @@ def validate_youtube_identifier(identifier: str) -> tuple[bool, str]:
         # Valider l'ID de chaîne: doit commencer par UC et avoir exactement 24 caractères
         if not identifier.startswith("UC") or len(identifier) != 24:
             return False, "❌ Format d'ID de chaîne invalide. L'ID doit commencer par 'UC' et avoir 24 caractères, ou utilisez un handle (ex: @nom-de-chaine)."
-    
+
     return True, ""
 
 
@@ -75,16 +75,16 @@ class YouTube(commands.Cog):
                 "❌ La clé API YouTube n'est pas configurée.", ephemeral=True
             )
             return
-        
+
         # Validation des entrées
         if not channel_id or not channel_id.strip():
             await interaction.response.send_message(
                 "❌ L'ID de la chaîne ou le handle ne peut pas être vide.", ephemeral=True
             )
             return
-        
+
         channel_id = channel_id.strip()
-        
+
         # Valider le format de base du channel_id ou handle
         is_valid, error_msg = validate_youtube_identifier(channel_id)
         if not is_valid:

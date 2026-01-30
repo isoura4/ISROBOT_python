@@ -46,25 +46,25 @@ class Stream(commands.Cog):
                 "❌ Le nom du streamer ne peut pas être vide.", ephemeral=True
             )
             return
-        
+
         # Nettoyer le nom du streamer (enlever les espaces et convertir en minuscules)
         streamer_name = streamer_name.strip().lower()
-        
+
         # Valider que le nom respecte les règles Twitch (4-25 caractères, alphanumériques, underscores et tirets)
         if not re.match(r'^[a-zA-Z0-9_-]{4,25}$', streamer_name):
             await interaction.response.send_message(
-                "❌ Le nom du streamer est invalide. Les noms Twitch doivent contenir 4-25 caractères (lettres, chiffres, underscores, tirets).", 
+                "❌ Le nom du streamer est invalide. Les noms Twitch doivent contenir 4-25 caractères (lettres, chiffres, underscores, tirets).",
                 ephemeral=True
             )
             return
-        
+
         # Logique pour ajouter le streamer à la base de données
         if not TWITCH_CLIENT_ID or not TWITCH_CLIENT_SECRET:
             await interaction.response.send_message(
                 "❌ Les identifiants Twitch ne sont pas configurés.", ephemeral=True
             )
             return
-        
+
         try:
             # Connexion à la base de données SQLite:
             # Vérifier si le streamer existe déjà dans la base de données
@@ -84,7 +84,7 @@ class Stream(commands.Cog):
                     f"ℹ️ Le streamer {streamer_name} est déjà dans la liste.", ephemeral=True
                 )
                 return
-            
+
             # Ajouter le streamer et le channel id sélectionné à la base de données
             conn = database.get_db_connection()
             try:
@@ -100,7 +100,7 @@ class Stream(commands.Cog):
                 conn.commit()
             finally:
                 conn.close()
-            
+
             # Envoyer un message de confirmation
             await interaction.response.send_message(
                 f"✅ Streamer ajouté : **{streamer_name}** dans le salon {channel.mention}."
@@ -145,9 +145,9 @@ class Stream(commands.Cog):
                 "❌ Le nom du streamer ne peut pas être vide.", ephemeral=True
             )
             return
-        
+
         streamer_name = streamer_name.strip().lower()
-        
+
         try:
             # Logique pour retirer le streamer de la base de données
             conn = database.get_db_connection()
@@ -158,7 +158,7 @@ class Stream(commands.Cog):
                 conn.commit()
             finally:
                 conn.close()
-            
+
             if rows_deleted > 0:
                 await interaction.response.send_message(
                     f"✅ Streamer retiré : **{streamer_name}**"
@@ -194,7 +194,7 @@ class GetTwitchOAuth:
             "client_secret": self.client_secret,
             "grant_type": "client_credentials",
         }
-        
+
         last_error = None
         for attempt in range(retry_count):
             try:
@@ -219,7 +219,7 @@ class GetTwitchOAuth:
                     logger.warning(f"Tentative {attempt + 1}/{retry_count} échouée pour l'authentification Twitch: {e}")
                     await asyncio.sleep(2 ** attempt)
                     continue
-                    
+
         raise Exception(f"Échec de l'authentification Twitch après {retry_count} tentatives: {last_error}")
 
 
@@ -255,7 +255,7 @@ class CheckTwitchStatus:
     async def check_streamer_status(self, streamer_name: str, retry_count: int = 3):
         """Vérifier si un streamer est en ligne avec retry."""
         last_error = None
-        
+
         for attempt in range(retry_count):
             try:
                 token = await self.oauth.get_auth_token()
@@ -283,7 +283,7 @@ class CheckTwitchStatus:
                     logger.warning(f"Tentative {attempt + 1}/{retry_count} échouée pour {streamer_name}: {e}")
                     await asyncio.sleep(2 ** attempt)
                     continue
-        
+
         raise Exception(f"Échec de la vérification du streamer {streamer_name} après {retry_count} tentatives: {last_error}")
 
 

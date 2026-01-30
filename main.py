@@ -47,10 +47,10 @@ def validate_environment_variables():
         "server_id": "L'ID du serveur Discord est requis",
         "db_path": "Le chemin de la base de données est requis",
     }
-    
+
     missing_vars = []
     invalid_vars = []
-    
+
     for var_name, error_msg in required_vars.items():
         value = os.getenv(var_name)
         if not value:
@@ -63,7 +63,7 @@ def validate_environment_variables():
                     invalid_vars.append(f"  - {var_name}: Doit être un nombre positif")
             except ValueError:
                 invalid_vars.append(f"  - {var_name}: Doit être un nombre valide")
-    
+
     if missing_vars or invalid_vars:
         error_message = "❌ Erreur de configuration:\n"
         if missing_vars:
@@ -790,15 +790,15 @@ class ISROBOT(commands.Bot):
                 # Détecter les erreurs de quota
                 if "quota" in error_msg.lower() or "403" in error_msg:
                     logger.error(
-                        f"⚠️ QUOTA API YOUTUBE DÉPASSÉ! Vérification ignorée. "
-                        f"Le quota se réinitialise à minuit PST. Erreur: {e}"
+                        "⚠️ QUOTA API YOUTUBE DÉPASSÉ! Vérification ignorée. "
+                        "Le quota se réinitialise à minuit PST. Erreur: %s", e
                     )
                     print(
-                        f"❌ [YouTube] Quota API dépassé! "
-                        f"Prochaine tentative dans 30 minutes."
+                        "❌ [YouTube] Quota API dépassé! "
+                        "Prochaine tentative dans 30 minutes."
                     )
                 else:
-                    logger.error(f"Erreur lors de la vérification YouTube: {e}")
+                    logger.error("Erreur lors de la vérification YouTube: %s", e)
 
             # Attendre 10 minutes avant la prochaine vérification
             # Note: Rate limiting naturel via intervalle de 10min entre vérifications
@@ -809,7 +809,7 @@ class ISROBOT(commands.Bot):
     async def warning_decay_loop(self):
         """
         Vérifier périodiquement et faire expirer les avertissements.
-        
+
         Note: There's a theoretical race condition if a moderator manually
         decrements warnings while this loop is running. However, this is
         acceptable because:
@@ -913,7 +913,6 @@ class ISROBOT(commands.Bot):
                     try:
                         guild_id = mute["guild_id"]
                         user_id = mute["user_id"]
-                        reason = mute["reason"]
 
                         guild = self.get_guild(int(guild_id))
                         if not guild:
@@ -922,16 +921,21 @@ class ISROBOT(commands.Bot):
                         member = guild.get_member(int(user_id))
                         if not member:
                             # User left the server, just remove from database
-                            moderation_utils.remove_mute(guild_id, user_id, None, "Utilisateur absent")
+                            moderation_utils.remove_mute(
+                                guild_id, user_id, None, "Utilisateur absent"
+                            )
                             continue
 
                         # Remove timeout
                         try:
                             await member.timeout(None, reason="Mute expiré")
-                            print(f"  ✓ Mute expiré pour {member.display_name} dans {guild.name}")
-                            logger.info(f"Mute expiré: {user_id} @ {guild_id}")
+                            print(
+                                f"  ✓ Mute expiré pour {member.display_name} "
+                                f"dans {guild.name}"
+                            )
+                            logger.info("Mute expiré: %s @ %s", user_id, guild_id)
                         except Exception as e:
-                            logger.error(f"Erreur lors du retrait du timeout: {e}")
+                            logger.error("Erreur lors du retrait du timeout: %s", e)
 
                         # Remove from database
                         moderation_utils.remove_mute(guild_id, user_id, None, "Expiré")
@@ -1084,7 +1088,7 @@ class ISROBOT(commands.Bot):
         # Only check if it's a digit before acquiring the lock
         if not (message.content.isdigit() and not str(message.content).isspace()):
             return
-        
+
         # Validate the number is within reasonable bounds to prevent integer overflow
         try:
             number = int(message.content)
@@ -1165,7 +1169,7 @@ class ISROBOT(commands.Bot):
     async def close(self):
         """Fermer proprement la session HTTP quand le bot se ferme."""
         logger.info("Démarrage de l'arrêt gracieux du bot...")
-        
+
         # Arrêter la tâche de vérification des streams
         if hasattr(self, "stream_check_task") and not self.stream_check_task.done():
             logger.info("Arrêt de la tâche de vérification Twitch...")
@@ -1191,7 +1195,7 @@ class ISROBOT(commands.Bot):
         if self.session:
             await self.session.close()
             logger.info("Session HTTP fermée")
-        
+
         logger.info("Arrêt du bot...")
         await super().close()
         logger.info("Bot arrêté avec succès")
@@ -1209,6 +1213,7 @@ class ISROBOT(commands.Bot):
 
 client = ISROBOT()
 
+
 def signal_handler(sig, frame):
     """Gestionnaire de signal pour arrêt gracieux."""
     logger.info(f"Signal {sig} reçu, arrêt du bot...")
@@ -1221,6 +1226,7 @@ def signal_handler(sig, frame):
     else:
         # Si le loop n'est pas en cours, forcer l'arrêt
         sys.exit(0)
+
 
 # Enregistrer les gestionnaires de signaux pour arrêt gracieux
 if sys.platform != "win32":

@@ -27,7 +27,7 @@ def get_db_connection():
             "Le chemin de la base de données n'est pas défini "
             "dans les variables d'environnement."
         )
-    
+
     conn = None
     try:
         conn = sqlite3.connect(DB_PATH, timeout=10.0)
@@ -149,7 +149,7 @@ def create_database():
     # Index pour les recherches fréquentes
     cursor.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_warnings_guild_user 
+        CREATE INDEX IF NOT EXISTS idx_warnings_guild_user
         ON warnings(guild_id, user_id)
     """
     )
@@ -174,7 +174,7 @@ def create_database():
     # Index pour les recherches d'historique
     cursor.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_history_guild_user 
+        CREATE INDEX IF NOT EXISTS idx_history_guild_user
         ON warning_history(guild_id, user_id)
     """
     )
@@ -201,7 +201,7 @@ def create_database():
     # Index pour les appels en attente
     cursor.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_appeals_status 
+        CREATE INDEX IF NOT EXISTS idx_appeals_status
         ON moderation_appeals(guild_id, status)
     """
     )
@@ -255,7 +255,7 @@ def create_database():
     # Index pour les flags en attente
     cursor.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_ai_flags_status 
+        CREATE INDEX IF NOT EXISTS idx_ai_flags_status
         ON ai_flags(guild_id, moderator_action)
     """
     )
@@ -279,7 +279,7 @@ def create_database():
     # Index pour les recherches d'expiration
     cursor.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_mutes_expires 
+        CREATE INDEX IF NOT EXISTS idx_mutes_expires
         ON active_mutes(expires_at)
     """
     )

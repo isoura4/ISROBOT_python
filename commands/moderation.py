@@ -77,7 +77,7 @@ class Moderation(commands.Cog):
                 # Apply 1-hour mute
                 duration = config.get("mute_duration_warn_2", 3600) if config else 3600
                 await self._apply_mute(
-                    interaction.guild, user, moderator_id, 
+                    interaction.guild, user, moderator_id,
                     "Mute automatique - 2 avertissements", duration
                 )
                 action_taken = f"\n🔇 **Mute automatique appliqué:** {moderation_utils.format_duration(duration)}"
@@ -288,7 +288,7 @@ class Moderation(commands.Cog):
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.checks.has_permissions(moderate_members=True)
     async def mute(
-        self, interaction: discord.Interaction, user: discord.Member, 
+        self, interaction: discord.Interaction, user: discord.Member,
         duration: str, reason: str
     ):
         """Manually mute a user."""
@@ -309,7 +309,6 @@ class Moderation(commands.Cog):
                 return
 
             guild_id = str(interaction.guild.id)
-            user_id = str(user.id)
             moderator_id = str(interaction.user.id)
 
             # Apply mute
@@ -454,7 +453,7 @@ class Moderation(commands.Cog):
                     cursor = conn.cursor()
                     cursor.execute(
                         """
-                        SELECT * FROM warning_history 
+                        SELECT * FROM warning_history
                         WHERE guild_id = ?
                         ORDER BY created_at DESC
                         LIMIT 20
@@ -501,7 +500,7 @@ class Moderation(commands.Cog):
     # --- Helper Methods ---
 
     async def _apply_mute(
-        self, guild: discord.Guild, user: discord.Member, 
+        self, guild: discord.Guild, user: discord.Member,
         moderator_id: str, reason: str, duration_seconds: int
     ):
         """Apply a mute to a user."""
@@ -515,7 +514,7 @@ class Moderation(commands.Cog):
         )
 
     async def _remove_mute(
-        self, guild: discord.Guild, user: discord.Member, 
+        self, guild: discord.Guild, user: discord.Member,
         moderator_id: str, reason: str
     ):
         """Remove a mute from a user."""
@@ -526,8 +525,8 @@ class Moderation(commands.Cog):
         moderation_utils.remove_mute(str(guild.id), str(user.id), moderator_id, reason)
 
     async def _post_to_modlog(
-        self, guild: discord.Guild, log_channel_id: str, 
-        action: str, user: discord.Member, 
+        self, guild: discord.Guild, log_channel_id: str,
+        action: str, user: discord.Member,
         moderator: discord.Member, **kwargs
     ):
         """Post an action to the moderation log channel."""

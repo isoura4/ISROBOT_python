@@ -208,8 +208,8 @@ async def create_ai_flag(
 
         cursor.execute(
             """
-            INSERT INTO ai_flags 
-            (guild_id, message_id, channel_id, user_id, message_content, 
+            INSERT INTO ai_flags
+            (guild_id, message_id, channel_id, user_id, message_content,
              ai_score, ai_category, ai_reason, moderator_action, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
         """,
@@ -354,7 +354,7 @@ async def update_ai_flag_action(
 
         cursor.execute(
             """
-            UPDATE ai_flags 
+            UPDATE ai_flags
             SET moderator_action = ?, moderator_id = ?, reviewed_at = ?
             WHERE id = ?
         """,
@@ -377,7 +377,7 @@ async def get_pending_ai_flags(guild_id: str, limit: int = 10) -> list:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT * FROM ai_flags 
+            SELECT * FROM ai_flags
             WHERE guild_id = ? AND moderator_action = 'pending'
             ORDER BY ai_score DESC, created_at ASC
             LIMIT ?

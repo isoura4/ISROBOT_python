@@ -130,7 +130,7 @@ class ModerationConfig(commands.Cog):
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def set_config(
-        self, interaction: discord.Interaction, 
+        self, interaction: discord.Interaction,
         parameter: str, value: str
     ):
         """Set a moderation configuration parameter."""
