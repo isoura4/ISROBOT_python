@@ -2,15 +2,17 @@
 Advanced logging configuration for ISROBOT.
 
 Features:
-- Configurable log levels (DEBUG, INFO, WARNING, ERROR) via .env
+- Configurable log levels (DEBUG, INFO, WARNING, ERROR, VERBOSE) via .env
 - Automatic log file rotation to prevent oversized log files
 - Structured logging format for easier analysis and debugging
+- Colorized console output for improved readability
+- Different log level icons for quick visual identification
 """
 
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 
@@ -24,29 +26,142 @@ DEFAULT_LOG_FILE = "discord.log"
 DEFAULT_MAX_LOG_SIZE = 5 * 1024 * 1024  # 5 MB
 DEFAULT_BACKUP_COUNT = 5
 
-# Valid log levels
+# Custom VERBOSE level (between DEBUG and INFO)
+VERBOSE = 15
+logging.addLevelName(VERBOSE, "VERBOSE")
+
+# Valid log levels with aliases
 VALID_LOG_LEVELS = {
     "DEBUG": logging.DEBUG,
+    "VERBOSE": VERBOSE,
     "INFO": logging.INFO,
+    "NORMAL": logging.INFO,  # Alias for INFO
     "WARNING": logging.WARNING,
     "ERROR": logging.ERROR,
     "CRITICAL": logging.CRITICAL,
 }
 
+# ANSI color codes for terminal output
+COLORS = {
+    "RESET": "\033[0m",
+    "BOLD": "\033[1m",
+    "DIM": "\033[2m",
+    # Log level colors
+    "DEBUG": "\033[36m",      # Cyan
+    "VERBOSE": "\033[96m",    # Light Cyan
+    "INFO": "\033[32m",       # Green
+    "WARNING": "\033[33m",    # Yellow
+    "ERROR": "\033[31m",      # Red
+    "CRITICAL": "\033[41m",   # Red background
+    # Component colors
+    "TIME": "\033[90m",       # Gray
+    "MODULE": "\033[35m",     # Magenta
+}
+
+# Log level icons for visual identification
+LEVEL_ICONS = {
+    "DEBUG": "🔍",
+    "VERBOSE": "📝",
+    "INFO": "ℹ️ ",
+    "WARNING": "⚠️ ",
+    "ERROR": "❌",
+    "CRITICAL": "🚨",
+}
+
+
+def _supports_color() -> bool:
+    """Check if the terminal supports color output."""
+    if not hasattr(sys.stdout, "isatty"):
+        return False
+    if not sys.stdout.isatty():
+        return False
+    # Check for common environment variables that indicate color support
+    if os.getenv("NO_COLOR"):
+        return False
+    if os.getenv("FORCE_COLOR"):
+        return True
+    # Most modern terminals support color
+    return True
+
 
 class StructuredFormatter(logging.Formatter):
     """
-    Structured log formatter for easier parsing and analysis.
+    Structured log formatter for file logging with easier parsing and analysis.
     
     Format: [TIMESTAMP] [LEVEL] [MODULE:LINE] MESSAGE
     """
     
     def format(self, record: logging.LogRecord) -> str:
-        # Add structured fields
-        record.structured_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        # Add structured fields using timezone-aware datetime
+        record.structured_time = datetime.now(timezone.utc).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )[:-3]
         record.module_line = f"{record.module}:{record.lineno}"
         
         return super().format(record)
+
+
+class ColoredConsoleFormatter(logging.Formatter):
+    """
+    Colorized console formatter for improved readability.
+    
+    Features:
+    - Color-coded log levels
+    - Icons for quick visual identification
+    - Compact, readable format
+    """
+    
+    def __init__(self, use_colors: bool = True, use_icons: bool = True):
+        super().__init__()
+        self.use_colors = use_colors and _supports_color()
+        self.use_icons = use_icons
+    
+    def format(self, record: logging.LogRecord) -> str:
+        # Get timestamp
+        timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        
+        # Get level name and normalize it
+        level_name = record.levelname
+        if record.levelno == VERBOSE:
+            level_name = "VERBOSE"
+        
+        # Build the formatted message
+        if self.use_colors:
+            # Get colors
+            level_color = COLORS.get(level_name, COLORS["INFO"])
+            time_color = COLORS["TIME"]
+            module_color = COLORS["MODULE"]
+            reset = COLORS["RESET"]
+            
+            # Get icon
+            icon = LEVEL_ICONS.get(level_name, "") if self.use_icons else ""
+            
+            # Format with colors
+            formatted = (
+                f"{time_color}{timestamp}{reset} "
+                f"{level_color}{icon}{level_name:<8}{reset} "
+                f"{module_color}{record.name}{reset}: "
+                f"{record.getMessage()}"
+            )
+        else:
+            # Format without colors
+            icon = LEVEL_ICONS.get(level_name, "") if self.use_icons else ""
+            formatted = (
+                f"{timestamp} {icon}{level_name:<8} {record.name}: "
+                f"{record.getMessage()}"
+            )
+        
+        # Add exception info if present
+        if record.exc_info:
+            if not record.exc_text:
+                record.exc_text = self.formatException(record.exc_info)
+            if record.exc_text:
+                if self.use_colors:
+                    formatted += f"\n{COLORS['ERROR']}{record.exc_text}{COLORS['RESET']}"
+                else:
+                    formatted += f"\n{record.exc_text}"
+        
+        return formatted
 
 
 def get_log_level() -> int:
@@ -114,11 +229,8 @@ def setup_logging(
         datefmt="%Y-%m-%d %H:%M:%S"
     )
     
-    # Simpler format for console
-    console_formatter = logging.Formatter(
-        fmt="%(asctime)s:%(levelname)s:%(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
+    # Colorized format for console with icons
+    console_formatter = ColoredConsoleFormatter(use_colors=True, use_icons=True)
     
     # Create handlers
     handlers = []
@@ -173,7 +285,16 @@ def get_logger(name: str) -> logging.Logger:
     Returns:
         A configured logger instance.
     """
-    return logging.getLogger(name)
+    logger = logging.getLogger(name)
+    
+    # Add verbose method to logger instance
+    def verbose(msg, *args, **kwargs):
+        """Log a message at VERBOSE level (between DEBUG and INFO)."""
+        if logger.isEnabledFor(VERBOSE):
+            logger._log(VERBOSE, msg, args, **kwargs)
+    
+    logger.verbose = verbose
+    return logger
 
 
 # Module-level initialization for backward compatibility
@@ -186,3 +307,13 @@ def ensure_logging_initialized() -> None:
     if not _initialized:
         setup_logging()
         _initialized = True
+
+
+# Export the VERBOSE level constant for external use
+__all__ = [
+    "setup_logging",
+    "get_logger",
+    "ensure_logging_initialized",
+    "VERBOSE",
+    "VALID_LOG_LEVELS",
+]

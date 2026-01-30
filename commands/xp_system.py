@@ -1,3 +1,4 @@
+import logging
 import math
 import os
 import random
@@ -10,6 +11,9 @@ from dotenv import load_dotenv
 
 # Chargement du fichier .env
 load_dotenv()
+
+# Configure logging for this module
+logger = logging.getLogger(__name__)
 
 # Récupération des variables d'environnement
 SERVER_ID = int(os.getenv("server_id", "0"))
@@ -152,10 +156,10 @@ class XPSystem(commands.Cog):
                     # L'utilisateur a désactivé les MP ou a bloqué le bot
                     pass
                 except Exception as e:
-                    print(f"Erreur lors de l'envoi du message de level up à {message.author}: {e}")
+                    logger.warning(f"Erreur lors de l'envoi du message de level up à {message.author}: {e}")
 
         except Exception as e:
-            print(f"Erreur lors de l'ajout d'XP pour {message.author}: {e}")
+            logger.error(f"Erreur lors de l'ajout d'XP pour {message.author}: {e}")
 
     @app_commands.command(name="level", description="Affiche votre niveau et votre XP")
     @app_commands.guilds(discord.Object(id=SERVER_ID))
