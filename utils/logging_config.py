@@ -58,12 +58,12 @@ COLORS = {
     "MODULE": "\033[35m",     # Magenta
 }
 
-# Log level icons for visual identification
+# Log level icons for visual identification (all without trailing space - handled in formatter)
 LEVEL_ICONS = {
     "DEBUG": "🔍",
     "VERBOSE": "📝",
-    "INFO": "ℹ️ ",
-    "WARNING": "⚠️ ",
+    "INFO": "ℹ️",
+    "WARNING": "⚠️",
     "ERROR": "❌",
     "CRITICAL": "🚨",
 }
@@ -133,21 +133,23 @@ class ColoredConsoleFormatter(logging.Formatter):
             module_color = COLORS["MODULE"]
             reset = COLORS["RESET"]
             
-            # Get icon
-            icon = LEVEL_ICONS.get(level_name, "") if self.use_icons else ""
+            # Get icon (add space after if icon is present)
+            icon = LEVEL_ICONS.get(level_name, "")
+            icon_str = f"{icon} " if self.use_icons and icon else ""
             
             # Format with colors
             formatted = (
                 f"{time_color}{timestamp}{reset} "
-                f"{level_color}{icon}{level_name:<8}{reset} "
+                f"{level_color}{icon_str}{level_name:<8}{reset} "
                 f"{module_color}{record.name}{reset}: "
                 f"{record.getMessage()}"
             )
         else:
             # Format without colors
-            icon = LEVEL_ICONS.get(level_name, "") if self.use_icons else ""
+            icon = LEVEL_ICONS.get(level_name, "")
+            icon_str = f"{icon} " if self.use_icons and icon else ""
             formatted = (
-                f"{timestamp} {icon}{level_name:<8} {record.name}: "
+                f"{timestamp} {icon_str}{level_name:<8} {record.name}: "
                 f"{record.getMessage()}"
             )
         

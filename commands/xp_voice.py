@@ -1,4 +1,3 @@
-import logging
 import math
 import os
 import random
@@ -8,11 +7,13 @@ import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
+from utils.logging_config import get_logger
+
 # Chargement du fichier .env
 load_dotenv()
 
 # Configure logging for this module
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Récupération des variables d'environnement
 SERVER_ID = int(os.getenv("server_id", "0"))

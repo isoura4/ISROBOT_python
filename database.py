@@ -1,14 +1,15 @@
-import logging
 import os
 import sqlite3
 
 import dotenv
 
+from utils.logging_config import get_logger
+
 # Charger les variables d'environnement depuis le fichier .env
 dotenv.load_dotenv()
 
 # Configure logging for this module
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Chemin vers la base de données SQLite
 # Convertir en chemin absolu pour éviter les problèmes de localisation
