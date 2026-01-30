@@ -1,7 +1,6 @@
 # Importation des bibliothèques et modules
 import asyncio
 from datetime import datetime, timedelta, timezone
-import logging
 import os
 from pathlib import Path
 import signal
@@ -14,29 +13,14 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 import database
+from utils.logging_config import setup_logging, get_logger
 
 # Chargement du fichier .env
 load_dotenv()
 
-# Parametrage des logs - Faire ceci en premier
-# Configuration avancée avec rotation des logs et sortie console
-logging.basicConfig(
-    level=logging.INFO,
-    encoding="utf-8",
-    format="%(asctime)s:%(levelname)s:%(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        # Log vers fichier
-        logging.FileHandler("discord.log", encoding="utf-8"),
-        # Log vers console pour debug
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-
-# Réduire le niveau de log pour les bibliothèques tierces
-logging.getLogger("discord").setLevel(logging.WARNING)
-logging.getLogger("aiohttp").setLevel(logging.WARNING)
+# Parametrage des logs - Utiliser la configuration centralisée
+setup_logging()
+logger = get_logger(__name__)
 
 
 def validate_environment_variables():
@@ -78,8 +62,7 @@ def validate_environment_variables():
 try:
     validate_environment_variables()
 except ValueError as e:
-    print(str(e))
-    logger.error(f"Erreur de validation des variables d'environnement: {e}")
+    logger.error("Erreur de validation des variables d'environnement: %s", e)
     sys.exit(1)
 
 # Récupération des variables d'environnement
@@ -123,18 +106,18 @@ class ISROBOT(commands.Bot):
         self.session = aiohttp.ClientSession(timeout=timeout)
 
         # Lancer le script database.py pour créer la base de données
-        print("Initialisation de la base de données...")
+        logger.info("Initialisation de la base de données...")
         try:
             import database
 
             database.create_database()
-            print("Base de données initialisée avec succès.")
+            logger.info("Base de données initialisée avec succès")
         except Exception as e:
-            print(f"Erreur lors de l'initialisation de la base de données: {e}")
+            logger.error("Erreur lors de l'initialisation de la base de données: %s", e)
 
         # Supprimer toutes les commandes /
         self.tree.clear_commands(guild=None)
-        print("Commandes existantes vidées")
+        logger.debug("Commandes existantes vidées")
 
         # Parcourir les fichiers contenant des commandes
         commands_path = Path("commands/")
@@ -145,22 +128,22 @@ class ISROBOT(commands.Bot):
             module_name = f"commands.{file.stem}"
             try:
                 await self.load_extension(module_name)
-                print(f"Extension {module_name} chargée avec succès")
+                logger.debug("Extension %s chargée", module_name)
             except Exception as e:
-                print(f"Erreur lors du chargement de {module_name}: {e}")
+                logger.error("Erreur lors du chargement de %s: %s", module_name, e)
 
         # Synchroniser les commandes avec Discord
         try:
             # Synchronisation globale (peut prendre jusqu'à 1 heure)
             synced_global = await self.tree.sync()
-            print(f"{len(synced_global)} commande(s) synchronisée(s) globalement")
+            logger.info("%d commande(s) synchronisée(s) globalement", len(synced_global))
 
             # Synchronisation sur le serveur spécifique (instantané)
             synced_guild = await self.tree.sync(guild=discord.Object(id=SERVER_ID))
-            print(f"{len(synced_guild)} commande(s) synchronisée(s) avec le serveur")
+            logger.info("%d commande(s) synchronisée(s) avec le serveur", len(synced_guild))
 
         except Exception as e:
-            print(f"Erreur lors de la synchronisation: {e}")
+            logger.error("Erreur lors de la synchronisation: %s", e)
             import traceback
 
             traceback.print_exc()
@@ -176,12 +159,12 @@ class ISROBOT(commands.Bot):
             )
             result = cursor.fetchone()
             if result:
-                print("Le minijeux du compteur est déjà configuré.")
+                logger.debug("Le minijeux du compteur est déjà configuré")
             else:
-                print("Le minijeux du compteur n'est pas configuré.")
+                logger.debug("Le minijeux du compteur n'est pas configuré")
             conn.close()
         except Exception as e:
-            print(f"Erreur lors de la vérification du minijeux du compteur: {e}")
+            logger.error("Erreur lors de la vérification du minijeux du compteur: %s", e)
             import traceback
 
             traceback.print_exc()
@@ -217,10 +200,9 @@ class ISROBOT(commands.Bot):
                     finally:
                         conn.close()
 
-                    print(
-                        f"🔍 [Twitch] Vérification de {len(streamers)} streamer(s)..."
+                    logger.info(
+                        "[Twitch] Vérification de %d streamer(s)...", len(streamers)
                     )
-                    logger.debug(f"Vérification de {len(streamers)} streamer(s) Twitch")
 
                     for streamer in streamers:
                         try:
@@ -233,13 +215,8 @@ class ISROBOT(commands.Bot):
                             stream_channel_id = streamer[2]
                             announced = streamer[4]
 
-                            print(
-                                f"  → Vérification du streamer Twitch: "
-                                f"{streamer_name}"
-                            )
                             logger.debug(
-                                f"Vérification du statut de {streamer_name} "
-                                f"sur Twitch"
+                                "  → Vérification du streamer: %s", streamer_name
                             )
 
                             # Vérifier si le streamer est en ligne
@@ -249,10 +226,7 @@ class ISROBOT(commands.Bot):
                             if (
                                 stream_data and len(stream_data) > 0
                             ):  # Si des données sont retournées, le streamer est en ligne
-                                print(f"    ✓ {streamer_name} est en ligne !")
-                                logger.debug(
-                                    f"{streamer_name} est actuellement en ligne"
-                                )
+                                logger.info("    ✓ %s est en ligne!", streamer_name)
                                 # Vérifier si on a déjà annoncé ce stream
                                 if announced == 0:
                                     channel = self.get_channel(int(stream_channel_id))
@@ -292,14 +266,12 @@ class ISROBOT(commands.Bot):
                                         finally:
                                             conn.close()
                                 else:
-                                    print(f"    ℹ {streamer_name} est déjà annoncé")
                                     logger.debug(
-                                        f"{streamer_name} est en ligne mais "
-                                        f"déjà annoncé"
+                                        "%s est en ligne mais déjà annoncé",
+                                        streamer_name
                                     )
                             else:
-                                print(f"    ✗ {streamer_name} est hors ligne")
-                                logger.debug(f"{streamer_name} n'est pas en ligne")
+                                logger.debug("    ✗ %s est hors ligne", streamer_name)
                                 # Le streamer n'est pas en ligne, réinitialiser le statut d'annonce
                                 if announced == 1:  # Si était annoncé
                                     conn = database.get_db_connection()
@@ -311,31 +283,34 @@ class ISROBOT(commands.Bot):
                                         )
                                         conn.commit()
                                         logger.debug(
-                                            f"Statut réinitialisé pour le streamer {streamer_name}"
+                                            "Statut réinitialisé pour %s", streamer_name
                                         )
                                     finally:
                                         conn.close()
                         except asyncio.TimeoutError:
                             logger.warning(
-                                f"Timeout lors de la vérification du streamer {streamer[1]}"
+                                "Timeout lors de la vérification du streamer %s",
+                                streamer[1]
                             )
                         except aiohttp.ClientError as e:
                             logger.error(
-                                f"Erreur réseau lors de la vérification du streamer {streamer[1]}: {e}"
+                                "Erreur réseau lors de la vérification de %s: %s",
+                                streamer[1], e
                             )
                         except Exception as e:
                             logger.error(
-                                f"Erreur lors de la vérification du streamer {streamer[1]}: {e}"
+                                "Erreur lors de la vérification de %s: %s",
+                                streamer[1], e
                             )
 
             except asyncio.TimeoutError:
-                logger.warning("Timeout global lors de la vérification des streams Twitch")
+                logger.warning("Timeout global lors de la vérification Twitch")
             except aiohttp.ClientError as e:
-                logger.error(f"Erreur réseau lors de la vérification des streams: {e}")
+                logger.error("Erreur réseau Twitch: %s", e)
             except sqlite3.Error as e:
-                logger.error(f"Erreur de base de données lors de la vérification des streams: {e}")
+                logger.error("Erreur de base de données Twitch: %s", e)
             except Exception as e:
-                logger.error(f"Erreur lors de la vérification des streams: {e}")
+                logger.error("Erreur lors de la vérification Twitch: %s", e)
 
             # Attendre 5 minutes avant la prochaine vérification
             # Note: Rate limiting naturel via intervalle de 5min entre vérifications
@@ -391,8 +366,7 @@ class ISROBOT(commands.Bot):
                     finally:
                         conn.close()
 
-                    print(f"🔍 [YouTube] Vérification de {len(channels)} chaîne(s)...")
-                    logger.debug(f"Vérification de {len(channels)} chaîne(s) YouTube")
+                    logger.info("[YouTube] Vérification de %d chaîne(s)...", len(channels))
 
                     for channel_data in channels:
                         try:
@@ -406,17 +380,11 @@ class ISROBOT(commands.Bot):
                             notify_videos = channel_data[8]  # notifyVideos
                             notify_shorts = channel_data[9]  # notifyShorts
 
-                            print(
-                                f"  → Vérification de la chaîne YouTube: "
-                                f"{channel_name}"
-                            )
-                            print(
-                                f"    ℹ Notifications activées: "
-                                f"vidéos={bool(notify_videos)}, "
-                                f"shorts={bool(notify_shorts)}"
-                            )
                             logger.debug(
-                                f"Vérification de {channel_name} " f"(ID: {channel_id})"
+                                "  → Vérification: %s (vidéos=%s, shorts=%s)",
+                                channel_name,
+                                bool(notify_videos),
+                                bool(notify_shorts)
                             )
 
                             discord_channel = self.get_channel(discord_channel_id)
@@ -424,7 +392,8 @@ class ISROBOT(commands.Bot):
                                 discord_channel, discord.TextChannel
                             ):
                                 logger.warning(
-                                    f"Canal Discord introuvable ou invalide pour {channel_name}: {discord_channel_id}"
+                                    "Canal Discord introuvable pour %s: %s",
+                                    channel_name, discord_channel_id
                                 )
                                 continue
 
@@ -435,12 +404,14 @@ class ISROBOT(commands.Bot):
                                 )
                                 if not permissions.send_messages:
                                     logger.warning(
-                                        f"Permission manquante pour envoyer des messages dans {discord_channel.name} (ID: {discord_channel_id}) pour la chaîne YouTube {channel_name}"
+                                        "Permission manquante (messages) pour %s",
+                                        channel_name
                                     )
                                     continue
                                 if not permissions.embed_links:
                                     logger.warning(
-                                        f"Permission manquante pour envoyer des embeds dans {discord_channel.name} (ID: {discord_channel_id}) pour la chaîne YouTube {channel_name}"
+                                        "Permission manquante (embeds) pour %s",
+                                        channel_name
                                     )
                                     continue
 
@@ -448,9 +419,9 @@ class ISROBOT(commands.Bot):
 
                             # Vérifier si au moins un type de notification est activé
                             if not notify_videos and not notify_shorts:
-                                print(
-                                    f"    ⚠ Aucune notification activée pour "
-                                    f"{channel_name} - ignorer"
+                                logger.warning(
+                                    "Aucune notification activée pour %s",
+                                    channel_name
                                 )
                                 logger.warning(
                                     f"Aucune notification activée pour {channel_name}"
@@ -459,10 +430,7 @@ class ISROBOT(commands.Bot):
 
                             # Vérifier les nouvelles vidéos et shorts
                             if notify_videos or notify_shorts:
-                                print(
-                                    f"    → Vérification des vidéos/shorts "
-                                    f"pour {channel_name}"
-                                )
+                                logger.debug("    → Vérification des vidéos/shorts pour %s", channel_name)
                                 logger.debug(
                                     f"Vérification des uploads pour "
                                     f"{channel_name} (vidéos: {notify_videos}, "
@@ -488,19 +456,13 @@ class ISROBOT(commands.Bot):
                                     found_last_short = False
 
                                     if not latest_uploads:
-                                        print(
-                                            f"      ℹ Aucune vidéo trouvée pour "
-                                            f"{channel_name}"
-                                        )
+                                        logger.debug("      ℹ Aucune vidéo trouvée pour %s", channel_name)
                                         logger.debug(
                                             f"Aucune vidéo trouvée pour "
                                             f"{channel_name}"
                                         )
                                     else:
-                                        print(
-                                            f"      ℹ {len(latest_uploads)} vidéo(s) "
-                                            f"trouvée(s) pour {channel_name}"
-                                        )
+                                        logger.debug("      ℹ %d vidéo(s) trouvée(s) pour %s", len(latest_uploads), channel_name)
 
                                     # First pass: identify all new content and find the newest of each type
                                     for upload in latest_uploads:
@@ -517,13 +479,9 @@ class ISROBOT(commands.Bot):
                                         # in the uploads playlist, if an item is older than 24h, ALL subsequent items
                                         # will also be older (regardless of type), so we can safely break.
                                         if not self._is_recently_published(published_at, hours=24):
-                                            print(
-                                                f"        ⏭ Contenu trop ancien ignoré "
-                                                f"(publié le {published_at[:10]}): {video_id[:8]}..."
-                                            )
                                             logger.debug(
-                                                f"Contenu ignoré car trop ancien pour "
-                                                f"{channel_name}: {video_id} (date: {published_at})"
+                                                "Contenu trop ancien pour %s: %s (%s)",
+                                                channel_name, video_id, published_at
                                             )
                                             # Stop checking: all subsequent items will be older than this one
                                             break
@@ -535,13 +493,9 @@ class ISROBOT(commands.Bot):
                                             )
                                         )
                                         if not video_details:
-                                            print(
-                                                f"        ⚠ Impossible de récupérer "
-                                                f"les détails de la vidéo {video_id}"
-                                            )
                                             logger.warning(
-                                                f"Impossible de récupérer les détails "
-                                                f"de la vidéo {video_id}"
+                                                "Impossible de récupérer les détails de la vidéo %s",
+                                                video_id
                                             )
                                             continue
 
@@ -558,7 +512,7 @@ class ISROBOT(commands.Bot):
                                             "short" if is_short_video else "vidéo"
                                         )
 
-                                        print(
+                                        logger.debug(
                                             f"        → Vérification: {content_type} "
                                             f"'{video_title[:50]}...' (ID: {video_id[:8]}...)"
                                         )
@@ -568,7 +522,7 @@ class ISROBOT(commands.Bot):
                                             # Check if this is the last known short (stop checking older shorts)
                                             if video_id == last_short_id:
                                                 found_last_short = True
-                                                print(
+                                                logger.debug(
                                                     f"          ℹ Short déjà connu trouvé "
                                                     f"(ID: {video_id[:8]}...) - arrêt de la vérification des shorts plus anciens"
                                                 )
@@ -577,7 +531,7 @@ class ISROBOT(commands.Bot):
 
                                             # Skip if we've already found the last known short
                                             if found_last_short:
-                                                print(
+                                                logger.debug(
                                                     f"          ⏭ Short ignoré (plus ancien que le dernier connu): {video_id[:8]}..."
                                                 )
                                                 continue
@@ -595,7 +549,7 @@ class ISROBOT(commands.Bot):
 
                                                 # Only announce if we haven't already selected one to announce
                                                 if newest_short_to_announce is None:
-                                                    print(
+                                                    logger.info(
                                                         f"          ✓ Nouveau short "
                                                         f"détecté: {video_title[:50]}..."
                                                     )
@@ -609,12 +563,12 @@ class ISROBOT(commands.Bot):
                                                         "thumbnail_url": thumbnail_url,
                                                     }
                                                 else:
-                                                    print(
+                                                    logger.info(
                                                         f"          ℹ Short détecté mais ignoré "
                                                         f"(un plus récent sera annoncé): {video_id[:8]}..."
                                                     )
                                             elif not notify_shorts:
-                                                print(
+                                                logger.debug(
                                                     "          ⊗ Short ignoré "
                                                     "(notifications désactivées)"
                                                 )
@@ -624,7 +578,7 @@ class ISROBOT(commands.Bot):
                                             # Check if this is the last known video (stop checking older videos)
                                             if video_id == last_video_id:
                                                 found_last_video = True
-                                                print(
+                                                logger.debug(
                                                     f"          ℹ Vidéo déjà connue trouvée "
                                                     f"(ID: {video_id[:8]}...) - arrêt de la vérification des vidéos plus anciennes"
                                                 )
@@ -633,7 +587,7 @@ class ISROBOT(commands.Bot):
 
                                             # Skip if we've already found the last known video
                                             if found_last_video:
-                                                print(
+                                                logger.debug(
                                                     f"          ⏭ Vidéo ignorée (plus ancienne que la dernière connue): {video_id[:8]}..."
                                                 )
                                                 continue
@@ -651,7 +605,7 @@ class ISROBOT(commands.Bot):
 
                                                 # Only announce if we haven't already selected one to announce
                                                 if newest_video_to_announce is None:
-                                                    print(
+                                                    logger.info(
                                                         f"          ✓ Nouvelle vidéo "
                                                         f"détectée: {video_title[:50]}..."
                                                     )
@@ -665,12 +619,12 @@ class ISROBOT(commands.Bot):
                                                         "thumbnail_url": thumbnail_url,
                                                     }
                                                 else:
-                                                    print(
+                                                    logger.info(
                                                         f"          ℹ Vidéo détectée mais ignorée "
                                                         f"(une plus récente sera annoncée): {video_id[:8]}..."
                                                     )
                                             elif not notify_videos:
-                                                print(
+                                                logger.debug(
                                                     "          ⊗ Vidéo ignorée "
                                                     "(notifications désactivées)"
                                                 )
@@ -793,7 +747,7 @@ class ISROBOT(commands.Bot):
                         "⚠️ QUOTA API YOUTUBE DÉPASSÉ! Vérification ignorée. "
                         "Le quota se réinitialise à minuit PST. Erreur: %s", e
                     )
-                    print(
+                    logger.error(
                         "❌ [YouTube] Quota API dépassé! "
                         "Prochaine tentative dans 30 minutes."
                     )
@@ -828,7 +782,7 @@ class ISROBOT(commands.Bot):
                 # Get users whose warnings should decay
                 users_to_decay = moderation_utils.get_users_for_decay()
 
-                print(f"🔍 [Modération] Vérification de {len(users_to_decay)} utilisateur(s) pour expiration...")
+                logger.info("[Modération] Vérification de %d utilisateur(s) pour expiration...", len(users_to_decay))
                 logger.debug(f"Vérification de {len(users_to_decay)} utilisateurs pour expiration")
 
                 for user_data in users_to_decay:
@@ -842,7 +796,7 @@ class ISROBOT(commands.Bot):
                             guild_id, user_id, None, "Expiration automatique"
                         )
 
-                        print(f"  ✓ Avertissement expiré pour l'utilisateur {user_id} dans le serveur {guild_id}")
+                        logger.info("  ✓ Avertissement expiré pour %s dans %s", user_id, guild_id)
                         logger.info(f"Avertissement expiré: {user_id} @ {guild_id} ({warn_count} -> {new_count})")
 
                         # If warnings reach 0, remove active mute
@@ -906,7 +860,7 @@ class ISROBOT(commands.Bot):
                 expired_mutes = moderation_utils.get_expired_mutes()
 
                 if expired_mutes:
-                    print(f"🔍 [Modération] {len(expired_mutes)} mute(s) expiré(s) détecté(s)")
+                    logger.info("[Modération] %d mute(s) expiré(s) détecté(s)", len(expired_mutes))
                     logger.debug(f"Traitement de {len(expired_mutes)} mutes expirés")
 
                 for mute in expired_mutes:
@@ -929,7 +883,7 @@ class ISROBOT(commands.Bot):
                         # Remove timeout
                         try:
                             await member.timeout(None, reason="Mute expiré")
-                            print(
+                            logger.info(
                                 f"  ✓ Mute expiré pour {member.display_name} "
                                 f"dans {guild.name}"
                             )
@@ -1201,14 +1155,14 @@ class ISROBOT(commands.Bot):
         logger.info("Bot arrêté avec succès")
 
     async def on_ready(self):
-        print("Ready !")
+        logger.info("Bot prêt!")
         if self.user:
-            print(f"Connecté en tant que {self.user} (ID: {self.user.id})")
+            logger.info("Connecté en tant que %s (ID: %s)", self.user, self.user.id)
             await self.change_presence(
                 activity=discord.CustomActivity(name="Prêt à aider !", emoji="🤖")
             )
         else:
-            print("Erreur: Utilisateur non défini")
+            logger.error("Erreur: Utilisateur non défini")
 
 
 client = ISROBOT()
@@ -1217,7 +1171,7 @@ client = ISROBOT()
 def signal_handler(sig, frame):
     """Gestionnaire de signal pour arrêt gracieux."""
     logger.info(f"Signal {sig} reçu, arrêt du bot...")
-    print(f"\n⚠️ Signal {sig} reçu, arrêt gracieux du bot...")
+    logger.warning("Signal %s reçu, arrêt gracieux du bot...", sig)
     # Utiliser le loop pour planifier la fermeture du bot
     # au lieu de créer une tâche directement depuis le signal handler
     loop = client.loop
@@ -1249,6 +1203,6 @@ if TOKEN:
     finally:
         logger.info("Bot terminé")
 else:
-    print("❌ Erreur: TOKEN non trouvé dans le fichier .env")
+    logger.error("TOKEN non trouvé dans le fichier .env")
     logger.error("TOKEN non trouvé dans le fichier .env")
     sys.exit(1)

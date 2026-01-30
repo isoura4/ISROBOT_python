@@ -129,7 +129,7 @@ class Stream(commands.Cog):
                 # Cette méthode sera appelée périodiquement
                 pass
         except Exception as e:
-            print(f"Erreur lors de la vérification des streams: {e}")
+            logger.error("Erreur lors de la vérification des streams: %s", e)
 
     @app_commands.command(
         name="stream_remove",

@@ -1,3 +1,4 @@
+import logging
 import os
 
 import discord
@@ -7,6 +8,9 @@ from dotenv import load_dotenv
 
 # Chargement du fichier .env
 load_dotenv()
+
+# Logger pour ce module
+logger = logging.getLogger(__name__)
 
 # Récupération des variables d'environnement
 SERVER_ID = int(os.getenv("server_id", "0"))
@@ -35,15 +39,15 @@ class Reload(commands.Cog):
                     try:
                         await self.bot.reload_extension(module_name)
                         reloaded_extensions.append(module_name)
-                        print(f"Extension {module_name} rechargée avec succès")
+                        logger.debug("Extension %s rechargée", module_name)
                     except commands.ExtensionNotLoaded:
                         # Si l'extension n'est pas chargée, la charger
                         await self.bot.load_extension(module_name)
                         reloaded_extensions.append(module_name)
-                        print(f"Extension {module_name} chargée avec succès")
+                        logger.debug("Extension %s chargée", module_name)
                 except Exception as e:
                     failed_extensions.append(f"{module_name}: {str(e)}")
-                    print(f"Erreur lors du rechargement de {module_name}: {e}")
+                    logger.error("Erreur lors du rechargement de %s: %s", module_name, e)
 
         # Synchroniser les commandes avec Discord
         try:
@@ -51,7 +55,7 @@ class Reload(commands.Cog):
             sync_success = True
         except Exception as e:
             sync_success = False
-            print(f"Erreur lors de la synchronisation: {e}")
+            logger.error("Erreur lors de la synchronisation: %s", e)
 
         # Préparer le message de réponse
         embed = discord.Embed(
