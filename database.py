@@ -3,8 +3,13 @@ import sqlite3
 
 import dotenv
 
+from utils.logging_config import get_logger
+
 # Charger les variables d'environnement depuis le fichier .env
 dotenv.load_dotenv()
+
+# Configure logging for this module
+logger = get_logger(__name__)
 
 # Chemin vers la base de données SQLite
 # Convertir en chemin absolu pour éviter les problèmes de localisation
@@ -50,14 +55,9 @@ def create_database():
 
     db_existed = os.path.exists(DB_PATH)
     if db_existed:
-        print(
-            f"La base de données existe déjà à l'emplacement: {DB_PATH}"
-        )
+        logger.debug(f"La base de données existe déjà à l'emplacement: {DB_PATH}")
     else:
-        print(
-            f"La base de données n'existe pas, elle va être créée "
-            f"à l'emplacement: {DB_PATH}"
-        )
+        logger.info(f"Création de la base de données à l'emplacement: {DB_PATH}")
 
     # Créer les tables nécessaires (toujours exécuter cette partie)
     # CREATE TABLE IF NOT EXISTS permet de créer uniquement si la table n'existe pas
@@ -288,12 +288,12 @@ def create_database():
     conn.close()
 
     if db_existed:
-        print(
+        logger.debug(
             "Tables vérifiées et créées si nécessaire "
-            "(données existantes préservées)."
+            "(données existantes préservées)"
         )
     else:
-        print("Base de données et tables créées avec succès.")
+        logger.info("Base de données et tables créées avec succès")
 
 
 if __name__ == "__main__":
