@@ -110,7 +110,7 @@ class Stream(commands.Cog):
                     f"L'annonce sera faite avec la mention: {ping_role.mention}"
                 )
         except Exception as e:
-            logger.error(f"Erreur lors de l'ajout du streamer {streamer_name}: {e}")
+            logger.error("Erreur lors de l'ajout du streamer %s: %s", streamer_name, e)
             await interaction.response.send_message(
                 f"❌ Erreur lors de l'ajout du streamer: {str(e)}", ephemeral=True
             )
@@ -169,7 +169,7 @@ class Stream(commands.Cog):
                     ephemeral=True
                 )
         except Exception as e:
-            logger.error(f"Erreur lors de la suppression du streamer {streamer_name}: {e}")
+            logger.error("Erreur lors de la suppression du streamer %s: %s", streamer_name, e)
             await interaction.response.send_message(
                 f"❌ Erreur lors de la suppression du streamer: {str(e)}", ephemeral=True
             )
@@ -216,7 +216,7 @@ class GetTwitchOAuth:
             except (asyncio.TimeoutError, aiohttp.ClientError) as e:
                 last_error = str(e)
                 if attempt < retry_count - 1:
-                    logger.warning(f"Tentative {attempt + 1}/{retry_count} échouée pour l'authentification Twitch: {e}")
+                    logger.warning("Tentative %d/%d échouée pour l'authentification Twitch: %s", attempt + 1, retry_count, e)
                     await asyncio.sleep(2 ** attempt)
                     continue
 
@@ -280,7 +280,7 @@ class CheckTwitchStatus:
             except (asyncio.TimeoutError, aiohttp.ClientError) as e:
                 last_error = str(e)
                 if attempt < retry_count - 1:
-                    logger.warning(f"Tentative {attempt + 1}/{retry_count} échouée pour {streamer_name}: {e}")
+                    logger.warning("Tentative %d/%d échouée pour %s: %s", attempt + 1, retry_count, streamer_name, e)
                     await asyncio.sleep(2 ** attempt)
                     continue
 

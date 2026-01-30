@@ -73,20 +73,21 @@ class ColoredFormatter(logging.Formatter):
             icon = self.LEVEL_ICONS.get(record.levelno, "")
             record.levelname = f"{icon} {record.levelname}"
 
-        # Add colors
-        if self.use_colors:
-            color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
-            record.levelname = f"{color}{record.levelname}{Colors.RESET}"
-            record.msg = f"{color}{record.msg}{Colors.RESET}"
-
-        # Format the message
-        result = super().format(record)
+        # Format the message first (before adding colors)
+        # This ensures proper handling of format placeholders like %s
+        formatted = super().format(record)
 
         # Restore original values
         record.levelname = original_levelname
         record.msg = original_msg
 
-        return result
+        # Add colors to the final formatted string
+        if self.use_colors:
+            color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
+            # Color the entire line
+            formatted = f"{color}{formatted}{Colors.RESET}"
+
+        return formatted
 
 
 def get_log_level_from_env():
@@ -200,7 +201,7 @@ def print_startup_banner(logger):
 
     logger.info("=" * 50)
     logger.info("ISROBOT - Discord Bot Starting")
-    logger.info(f"Log Level: {level_name}")
+    logger.info("Log Level: %s", level_name)
     if level == logging.DEBUG:
         logger.info("Verbose mode enabled - all messages will be shown")
     logger.info("=" * 50)

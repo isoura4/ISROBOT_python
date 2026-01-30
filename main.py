@@ -337,7 +337,7 @@ class ISROBOT(commands.Bot):
 
             return time_diff <= timedelta(hours=hours)
         except (ValueError, TypeError, AttributeError) as e:
-            logger.error(f"Error parsing published date '{published_at_str}': {e}")
+            logger.error("Error parsing published date '%s': %s", published_at_str, e)
             # If we can't parse the date, assume it's old to be safe
             return False
 
@@ -423,18 +423,13 @@ class ISROBOT(commands.Bot):
                                     "Aucune notification activée pour %s",
                                     channel_name
                                 )
-                                logger.warning(
-                                    f"Aucune notification activée pour {channel_name}"
-                                )
                                 continue
 
                             # Vérifier les nouvelles vidéos et shorts
                             if notify_videos or notify_shorts:
-                                logger.debug("    → Vérification des vidéos/shorts pour %s", channel_name)
                                 logger.debug(
-                                    f"Vérification des uploads pour "
-                                    f"{channel_name} (vidéos: {notify_videos}, "
-                                    f"shorts: {notify_shorts})"
+                                    "Vérification uploads pour %s (vidéos=%s, shorts=%s)",
+                                    channel_name, notify_videos, notify_shorts
                                 )
                                 try:
                                     latest_uploads = (
@@ -456,13 +451,14 @@ class ISROBOT(commands.Bot):
                                     found_last_short = False
 
                                     if not latest_uploads:
-                                        logger.debug("      ℹ Aucune vidéo trouvée pour %s", channel_name)
                                         logger.debug(
-                                            f"Aucune vidéo trouvée pour "
-                                            f"{channel_name}"
+                                            "Aucune vidéo trouvée pour %s", channel_name
                                         )
                                     else:
-                                        logger.debug("      ℹ %d vidéo(s) trouvée(s) pour %s", len(latest_uploads), channel_name)
+                                        logger.debug(
+                                            "%d vidéo(s) trouvée(s) pour %s",
+                                            len(latest_uploads), channel_name
+                                        )
 
                                     # First pass: identify all new content and find the newest of each type
                                     for upload in latest_uploads:
@@ -736,9 +732,9 @@ class ISROBOT(commands.Bot):
             except asyncio.TimeoutError:
                 logger.warning("Timeout global lors de la vérification YouTube")
             except aiohttp.ClientError as e:
-                logger.error(f"Erreur réseau lors de la vérification YouTube: {e}")
+                logger.error("Erreur réseau YouTube: %s", e)
             except sqlite3.Error as e:
-                logger.error(f"Erreur de base de données lors de la vérification YouTube: {e}")
+                logger.error("Erreur de base de données YouTube: %s", e)
             except Exception as e:
                 error_msg = str(e)
                 # Détecter les erreurs de quota
@@ -782,8 +778,10 @@ class ISROBOT(commands.Bot):
                 # Get users whose warnings should decay
                 users_to_decay = moderation_utils.get_users_for_decay()
 
-                logger.info("[Modération] Vérification de %d utilisateur(s) pour expiration...", len(users_to_decay))
-                logger.debug(f"Vérification de {len(users_to_decay)} utilisateurs pour expiration")
+                logger.info(
+                    "[Modération] Vérification de %d utilisateur(s) pour expiration...",
+                    len(users_to_decay)
+                )
 
                 for user_data in users_to_decay:
                     try:
@@ -796,8 +794,10 @@ class ISROBOT(commands.Bot):
                             guild_id, user_id, None, "Expiration automatique"
                         )
 
-                        logger.info("  ✓ Avertissement expiré pour %s dans %s", user_id, guild_id)
-                        logger.info(f"Avertissement expiré: {user_id} @ {guild_id} ({warn_count} -> {new_count})")
+                        logger.info(
+                            "Avertissement expiré: %s @ %s (%d -> %d)",
+                            user_id, guild_id, warn_count, new_count
+                        )
 
                         # If warnings reach 0, remove active mute
                         if new_count == 0:
@@ -812,9 +812,9 @@ class ISROBOT(commands.Bot):
                                             moderation_utils.remove_mute(
                                                 guild_id, user_id, None, "Avertissements expirés"
                                             )
-                                            logger.info(f"Mute retiré pour {user_id} @ {guild_id}")
+                                            logger.info("Mute retiré pour %s @ %s", user_id, guild_id)
                                         except Exception as e:
-                                            logger.error(f"Erreur lors du retrait du timeout: {e}")
+                                            logger.error("Erreur lors du retrait du timeout: %s", e)
 
                         # Send DM notification
                         guild = self.get_guild(int(guild_id))
@@ -839,10 +839,10 @@ class ISROBOT(commands.Bot):
                                     await channel.send(embed=log_embed)
 
                     except Exception as e:
-                        logger.error(f"Erreur lors de l'expiration pour {user_data}: {e}")
+                        logger.error("Erreur lors de l'expiration: %s", e)
 
             except Exception as e:
-                logger.error(f"Erreur lors de la vérification d'expiration des avertissements: {e}")
+                logger.error("Erreur lors de la vérification d'expiration des avertissements: %s", e)
 
             # Attendre 6 heures avant la prochaine vérification
             await asyncio.sleep(21600)
@@ -860,8 +860,10 @@ class ISROBOT(commands.Bot):
                 expired_mutes = moderation_utils.get_expired_mutes()
 
                 if expired_mutes:
-                    logger.info("[Modération] %d mute(s) expiré(s) détecté(s)", len(expired_mutes))
-                    logger.debug(f"Traitement de {len(expired_mutes)} mutes expirés")
+                    logger.info(
+                        "[Modération] %d mute(s) expiré(s) détecté(s)",
+                        len(expired_mutes)
+                    )
 
                 for mute in expired_mutes:
                     try:
@@ -922,10 +924,10 @@ class ISROBOT(commands.Bot):
                                 await channel.send(embed=log_embed)
 
                     except Exception as e:
-                        logger.error(f"Erreur lors de l'expiration du mute pour {mute}: {e}")
+                        logger.error("Erreur lors de l'expiration du mute: %s", e)
 
             except Exception as e:
-                logger.error(f"Erreur lors de la vérification d'expiration des mutes: {e}")
+                logger.error("Erreur lors de la vérification d'expiration des mutes: %s", e)
 
             # Attendre 1 minute avant la prochaine vérification
             await asyncio.sleep(60)
@@ -1012,7 +1014,7 @@ class ISROBOT(commands.Bot):
 
         except Exception as e:
             # Gracefully handle AI errors - don't let them break the bot
-            logger.error(f"Erreur lors de l'analyse IA du message: {e}")
+            logger.error("Erreur lors de l'analyse IA du message: %s", e)
 
         # --- COUNTER GAME ---
         # Quand un message est envoyé dans le salon compteur du minijeux comparé avec le dernier chiffre
@@ -1033,7 +1035,7 @@ class ISROBOT(commands.Bot):
             finally:
                 conn.close()
         except Exception as e:
-            logger.error(f"Erreur lors de la vérification du salon de comptage: {e}")
+            logger.error("Erreur lors de la vérification du salon de comptage: %s", e)
             return
 
         if not is_counter_channel:
@@ -1116,7 +1118,7 @@ class ISROBOT(commands.Bot):
                     )
                     return
             except Exception as e:
-                logger.error(f"Erreur lors du traitement du jeu de comptage: {e}")
+                logger.error("Erreur lors du traitement du jeu de comptage: %s", e)
                 if conn:
                     conn.close()
 
@@ -1170,7 +1172,7 @@ client = ISROBOT()
 
 def signal_handler(sig, frame):
     """Gestionnaire de signal pour arrêt gracieux."""
-    logger.info(f"Signal {sig} reçu, arrêt du bot...")
+    logger.info("Signal %s reçu, arrêt du bot...", sig)
     logger.warning("Signal %s reçu, arrêt gracieux du bot...", sig)
     # Utiliser le loop pour planifier la fermeture du bot
     # au lieu de créer une tâche directement depuis le signal handler
@@ -1198,7 +1200,7 @@ if TOKEN:
     except KeyboardInterrupt:
         logger.info("Interruption clavier détectée")
     except Exception as e:
-        logger.error(f"Erreur lors de l'exécution du bot: {e}")
+        logger.error("Erreur lors de l'exécution du bot: %s", e)
         raise
     finally:
         logger.info("Bot terminé")
