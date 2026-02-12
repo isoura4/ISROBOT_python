@@ -16,12 +16,15 @@ from dotenv import load_dotenv
 
 import database
 
+# Répertoire racine du bot
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 # Synchroniser le fichier .env avec .env.example avant le chargement
 def ensure_env_variables():
     """Ajoute les variables manquantes dans .env à partir de .env.example."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    env_path = os.path.join(script_dir, ".env")
-    env_example_path = os.path.join(script_dir, ".env.example")
+    env_path = os.path.join(_SCRIPT_DIR, ".env")
+    env_example_path = os.path.join(_SCRIPT_DIR, ".env.example")
 
     if not os.path.exists(env_example_path):
         return
@@ -68,8 +71,7 @@ setup_logging()
 logger = get_logger(__name__)
 
 # Log des variables .env synchronisées
-script_dir = os.path.dirname(os.path.abspath(__file__))
-if os.path.exists(os.path.join(script_dir, ".env.example")):
+if os.path.exists(os.path.join(_SCRIPT_DIR, ".env.example")):
     logger.debug("Fichier .env synchronisé avec .env.example")
 
 

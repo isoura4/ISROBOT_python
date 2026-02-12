@@ -5,9 +5,11 @@ This module provides migration scripts to:
 1. Backup and remove the legacy 'corners' column from users table
 2. Create new tables for quests, shop, trades, and transactions
 3. Add guild_settings table for per-guild configuration
+4. Ensure all expected columns exist on existing tables
 """
 
 import logging
+import re
 import os
 import shutil
 import sqlite3
@@ -793,12 +795,20 @@ def ensure_table_columns(db_path=None):
         ],
     }
 
+    # Regex pattern for valid SQLite identifiers (alphanumeric + underscore)
+    _valid_identifier = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
     conn = get_db_connection(db_path)
     cursor = conn.cursor()
     added_columns = []
 
     try:
         for table_name, columns in expected_columns.items():
+            # Validate table name to prevent SQL injection
+            if not _valid_identifier.match(table_name):
+                logger.warning(f"Skipping invalid table name: {table_name}")
+                continue
+
             # Check if table exists
             cursor.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -814,6 +824,13 @@ def ensure_table_columns(db_path=None):
             # Add missing columns
             for col_name, col_def in columns:
                 if col_name not in existing_cols:
+                    # Validate column name to prevent SQL injection
+                    if not _valid_identifier.match(col_name):
+                        logger.warning(
+                            f"Skipping invalid column name: {col_name}"
+                        )
+                        continue
+
                     # Remove PRIMARY KEY / NOT NULL / UNIQUE constraints
                     # for ALTER TABLE ADD COLUMN (SQLite limitation)
                     safe_def = col_def.replace("PRIMARY KEY AUTOINCREMENT", "")
