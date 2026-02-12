@@ -16,6 +16,47 @@ from dotenv import load_dotenv
 
 import database
 
+# Synchroniser le fichier .env avec .env.example avant le chargement
+def ensure_env_variables():
+    """Ajoute les variables manquantes dans .env à partir de .env.example."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(script_dir, ".env")
+    env_example_path = os.path.join(script_dir, ".env.example")
+
+    if not os.path.exists(env_example_path):
+        return
+
+    # Lire les clés et valeurs par défaut depuis .env.example
+    example_entries = {}
+    with open(env_example_path, "r", encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and "=" in stripped:
+                key = stripped.split("=", 1)[0].strip()
+                value = stripped.split("=", 1)[1].strip()
+                example_entries[key] = value
+
+    # Lire les clés existantes dans .env
+    existing_keys = set()
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    key = stripped.split("=", 1)[0].strip()
+                    existing_keys.add(key)
+
+    # Ajouter les variables manquantes
+    missing = {k: v for k, v in example_entries.items() if k not in existing_keys}
+    if missing:
+        with open(env_path, "a", encoding="utf-8") as f:
+            f.write("\n# Variables ajoutées automatiquement depuis .env.example\n")
+            for key, value in missing.items():
+                f.write(f"{key}={value}\n")
+
+
+ensure_env_variables()
+
 # Chargement du fichier .env
 load_dotenv()
 
@@ -25,6 +66,11 @@ from utils.logging_config import setup_logging, get_logger
 # Setup logging with rotation and configurable levels
 setup_logging()
 logger = get_logger(__name__)
+
+# Log des variables .env synchronisées
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if os.path.exists(os.path.join(script_dir, ".env.example")):
+    logger.debug("Fichier .env synchronisé avec .env.example")
 
 
 def validate_environment_variables():
@@ -131,6 +177,16 @@ class ISROBOT(commands.Bot):
             logger.info("Base de données initialisée avec succès")
         except Exception as e:
             logger.error(f"Erreur lors de l'initialisation de la base de données: {e}")
+
+        # Exécuter les migrations pour mettre à jour la base de données
+        logger.info("Vérification des migrations de la base de données...")
+        try:
+            import db_migrations
+
+            db_migrations.run_all_migrations()
+            logger.info("Migrations de la base de données terminées avec succès")
+        except Exception as e:
+            logger.error(f"Erreur lors des migrations de la base de données: {e}")
 
         # Supprimer toutes les commandes /
         self.tree.clear_commands(guild=None)
