@@ -1094,10 +1094,13 @@ class ISROBOT(commands.Bot):
                     ai_model = config.get("ai_model", "llama2")
                     ollama_host = config.get("ollama_host", "http://localhost:11434")
                     rules_message_id = config.get("rules_message_id")
+                    rules_channel_id = config.get("rules_channel_id")
                     ai_flag_channel_id = config.get("ai_flag_channel_id")
 
                     # Get server rules
-                    server_rules = await ai_moderation.get_server_rules(message.guild, rules_message_id)
+                    server_rules = await ai_moderation.get_server_rules(
+                        message.guild, rules_message_id, rules_channel_id
+                    )
 
                     # Analyze message
                     result = await ai_moderation.analyze_message_with_ollama(

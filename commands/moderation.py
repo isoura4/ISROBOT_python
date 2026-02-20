@@ -62,7 +62,7 @@ class Moderation(commands.Cog):
 
             # Send DM to user
             rules_link = None
-            if config and config.get("rules_message_id"):
+            if config and (config.get("rules_message_id") or config.get("rules_channel_id")):
                 # We could construct a link, but for now we'll skip it
                 pass
 

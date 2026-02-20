@@ -106,11 +106,15 @@ class ModerationConfig(commands.Cog):
                 inline=False
             )
 
-            # Rules message
+            # Rules message and channel
             rules_msg = config.get('rules_message_id', 'Non configuré')
+            rules_channel = f"<#{config['rules_channel_id']}>" if config.get('rules_channel_id') else "Non configuré"
             embed.add_field(
-                name="📋 Message des règles",
-                value=f"**ID:** {rules_msg}",
+                name="📋 Règles du serveur",
+                value=(
+                    f"**Salon des règles:** {rules_channel}\n"
+                    f"**ID du message:** {rules_msg}"
+                ),
                 inline=False
             )
 
@@ -148,6 +152,7 @@ class ModerationConfig(commands.Cog):
             "ai_model": self._validate_string,
             "ollama_host": self._validate_url,
             "rules_message_id": self._validate_string,
+            "rules_channel": self._validate_channel,
             "warn_1_decay_days": self._validate_positive_int,
             "warn_2_decay_days": self._validate_positive_int,
             "warn_3_decay_days": self._validate_positive_int,
@@ -165,6 +170,7 @@ class ModerationConfig(commands.Cog):
             "ai_model": "ai_model",
             "ollama_host": "ollama_host",
             "rules_message_id": "rules_message_id",
+            "rules_channel": "rules_channel_id",
             "warn_1_decay_days": "warn_1_decay_days",
             "warn_2_decay_days": "warn_2_decay_days",
             "warn_3_decay_days": "warn_3_decay_days",
@@ -178,7 +184,7 @@ class ModerationConfig(commands.Cog):
                 f"**Paramètres valides:**\n"
                 f"- Canaux: `log_channel`, `appeal_channel`, `ai_flag_channel`\n"
                 f"- IA: `ai_enabled`, `ai_confidence_threshold`, `ai_model`, `ollama_host`\n"
-                f"- Règles: `rules_message_id`\n"
+                f"- Règles: `rules_message_id`, `rules_channel`\n"
                 f"- Expiration: `warn_1_decay_days`, `warn_2_decay_days`, `warn_3_decay_days`\n"
                 f"- Mutes: `mute_duration_2`, `mute_duration_3`",
                 ephemeral=True

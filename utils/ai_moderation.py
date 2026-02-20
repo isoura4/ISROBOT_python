@@ -235,32 +235,94 @@ async def create_ai_flag(
         conn.close()
 
 
-async def get_server_rules(guild: discord.Guild, rules_message_id: Optional[str]) -> Optional[str]:
+async def get_server_rules(
+    guild: discord.Guild,
+    rules_message_id: Optional[str],
+    rules_channel_id: Optional[str] = None,
+) -> Optional[str]:
     """
-    Fetch server rules from a configured message.
+    Fetch server rules from a configured channel and/or message.
+
+    If rules_channel_id is set:
+        - If rules_message_id is also set, fetch that specific message from the channel
+        - Otherwise, collect pinned messages from the channel as rules
+    If only rules_message_id is set:
+        - Search all text channels for that message (legacy behavior)
 
     Returns:
         Rules text if found, None otherwise
     """
-    if not rules_message_id:
+    if not rules_message_id and not rules_channel_id:
         return None
 
     try:
-        # Try to find the message in all text channels
-        for channel in guild.text_channels:
+        # If a rules channel is configured, use it directly
+        if rules_channel_id:
+            channel = guild.get_channel(int(rules_channel_id))
+            if not channel or not isinstance(channel, discord.TextChannel):
+                logger.warning(
+                    f"Rules channel {rules_channel_id} not found or not a text channel in guild {guild.id}"
+                )
+                return None
+
+            if not channel.permissions_for(guild.me).read_message_history:
+                logger.warning(
+                    f"Missing read_message_history permission for rules channel {rules_channel_id}"
+                )
+                return None
+
+            # If a specific message ID is provided, fetch it from the rules channel
+            if rules_message_id:
+                try:
+                    message = await channel.fetch_message(int(rules_message_id))
+                    if message:
+                        return message.content or (
+                            message.embeds[0].description if message.embeds else None
+                        )
+                except (discord.NotFound, discord.Forbidden, ValueError):
+                    logger.warning(
+                        f"Rules message {rules_message_id} not found in channel {rules_channel_id}"
+                    )
+                    return None
+
+            # No specific message ID: collect pinned messages as rules
             try:
-                if not channel.permissions_for(guild.me).read_message_history:
+                pinned = await channel.pins()
+                if pinned:
+                    rules_parts = []
+                    for msg in reversed(pinned):  # Oldest first
+                        if msg.content:
+                            rules_parts.append(msg.content)
+                        elif msg.embeds:
+                            for embed in msg.embeds:
+                                if embed.description:
+                                    rules_parts.append(embed.description)
+                    if rules_parts:
+                        return "\n\n".join(rules_parts)
+            except (discord.Forbidden, discord.HTTPException):
+                logger.warning(
+                    f"Could not fetch pinned messages from rules channel {rules_channel_id}"
+                )
+
+            return None
+
+        # Legacy behavior: search all text channels for the message
+        if rules_message_id:
+            for channel in guild.text_channels:
+                try:
+                    if not channel.permissions_for(guild.me).read_message_history:
+                        continue
+
+                    message = await channel.fetch_message(int(rules_message_id))
+                    if message:
+                        return message.content or (
+                            message.embeds[0].description if message.embeds else None
+                        )
+                except (discord.NotFound, discord.Forbidden, ValueError):
                     continue
 
-                message = await channel.fetch_message(int(rules_message_id))
-                if message:
-                    return message.content or (
-                        message.embeds[0].description if message.embeds else None
-                    )
-            except (discord.NotFound, discord.Forbidden, ValueError):
-                continue
+            logger.warning(f"Rules message {rules_message_id} not found in guild {guild.id}")
 
-        logger.warning(f"Rules message {rules_message_id} not found in guild {guild.id}")
         return None
 
     except Exception as e:

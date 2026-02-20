@@ -208,7 +208,7 @@ All minigame commands must be run in the designated minigame channel (set by an 
   - **AI Settings**: `ai_enabled`, `ai_confidence_threshold`, `ai_model`, `ollama_host`
   - **Warning Decay**: `warn_1_decay_days`, `warn_2_decay_days`, `warn_3_decay_days`
   - **Mute Durations**: `mute_duration_2`, `mute_duration_3`
-  - **Rules**: `rules_message_id`
+  - **Rules**: `rules_channel`, `rules_message_id`
 
 ### User Commands
 - `/appeal <reason>` - Submit an appeal against your warnings (48h cooldown)
@@ -475,7 +475,11 @@ The comprehensive moderation system provides advanced tools for server managemen
    /modconfig set ai_confidence_threshold 60
    ```
 
-4. (Optional) Set rules message for AI context:
+4. (Optional) Set rules channel for AI context:
+   ```
+   /modconfig set rules_channel #rules
+   ```
+   Or set a specific rules message ID:
    ```
    /modconfig set rules_message_id 123456789012345678
    ```
