@@ -73,6 +73,16 @@ class TestBuildAnalysisPrompt:
         assert "CATEGORY:" in prompt
         assert "REASON:" in prompt
 
+    def test_format_instructions_preserved_with_long_rules(self):
+        """Format instructions are never cut off even with very long rules."""
+        long_rules = "r" * (MAX_RULES_LENGTH + 1000)
+        prompt = _build_analysis_prompt("test", long_rules)
+        assert "RESPOND EXACTLY AS:" in prompt
+        assert "SCORE: [number]" in prompt
+        assert "CATEGORY: [category]" in prompt
+        assert "REASON: [one sentence]" in prompt
+        assert len(prompt) <= MAX_PROMPT_LENGTH
+
 
 class TestParseAiResponse:
     """Tests for the _parse_ai_response function."""

@@ -93,12 +93,9 @@ def _build_analysis_prompt(
     if server_rules and len(server_rules) > MAX_RULES_LENGTH:
         server_rules = server_rules[:MAX_RULES_LENGTH] + "..."
 
-    prompt = "You are a Discord content moderation AI. Be conservative - only flag clearly problematic messages.\n\n"
-
-    if server_rules:
-        prompt += f"Server Rules:\n{server_rules}\n\n"
-
-    prompt += f"""Message: "{message_content}"
+    # Build fixed parts (system prompt + message + format instructions)
+    system = "You are a Discord content moderation AI. Be conservative - only flag clearly problematic messages.\n\n"
+    message_section = f"""Message: "{message_content}"
 
 Score 0-100 (0-30: OK, 30-50: borderline, 50-70: likely violation, 70-100: clear violation).
 Category: Toxicity, Spam, NSFW, Harassment, Misinformation, or None.
@@ -109,11 +106,20 @@ CATEGORY: [category]
 REASON: [one sentence]
 """
 
-    # Final safety: truncate the total prompt if it exceeds the maximum
-    if len(prompt) > MAX_PROMPT_LENGTH:
-        prompt = prompt[:MAX_PROMPT_LENGTH]
+    # Calculate how much room is left for rules
+    fixed_length = len(system) + len(message_section)
+    if server_rules:
+        rules_header = "Server Rules:\n"
+        rules_footer = "\n\n"
+        available = MAX_PROMPT_LENGTH - fixed_length - len(rules_header) - len(rules_footer)
+        if available > 0:
+            if len(server_rules) > available:
+                server_rules = server_rules[:available] + "..."
+            return system + rules_header + server_rules + rules_footer + message_section
+        # Not enough room for rules, omit them
+        return system + message_section
 
-    return prompt
+    return system + message_section
 
 
 def _parse_ai_response(ai_response: str) -> Optional[dict]:
