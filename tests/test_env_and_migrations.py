@@ -237,3 +237,48 @@ class TestEnsureTableColumns:
             assert "startTime" in col_names
         finally:
             os.unlink(db_path)
+
+    def test_adds_rules_channel_id_to_moderation_config(self):
+        """rules_channel_id column is added to moderation_config table."""
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+
+        try:
+            conn = sqlite3.connect(db_path)
+            # Create moderation_config table without rules_channel_id
+            conn.execute("""
+                CREATE TABLE moderation_config (
+                    guild_id TEXT PRIMARY KEY,
+                    log_channel_id TEXT,
+                    appeal_channel_id TEXT,
+                    ai_enabled INTEGER DEFAULT 1,
+                    ai_confidence_threshold INTEGER DEFAULT 60,
+                    ai_flag_channel_id TEXT,
+                    ai_model TEXT DEFAULT 'llama2',
+                    ollama_host TEXT DEFAULT 'http://localhost:11434',
+                    decay_multiplier REAL DEFAULT 1.0,
+                    warn_1_decay_days INTEGER DEFAULT 7,
+                    warn_2_decay_days INTEGER DEFAULT 14,
+                    warn_3_decay_days INTEGER DEFAULT 21,
+                    mute_duration_warn_2 INTEGER DEFAULT 3600,
+                    mute_duration_warn_3 INTEGER DEFAULT 86400,
+                    rules_message_id TEXT,
+                    created_at TEXT NOT NULL
+                )
+            """)
+            conn.commit()
+            conn.close()
+
+            from db_migrations import ensure_table_columns
+
+            result = ensure_table_columns(db_path)
+            assert result is True
+
+            conn = sqlite3.connect(db_path)
+            cursor = conn.execute("PRAGMA table_info(moderation_config)")
+            col_names = [row[1] for row in cursor.fetchall()]
+            conn.close()
+
+            assert "rules_channel_id" in col_names
+        finally:
+            os.unlink(db_path)

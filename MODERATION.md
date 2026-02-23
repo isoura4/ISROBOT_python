@@ -172,6 +172,7 @@ Warnings automatically expire based on warn count:
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|
+| `rules_channel` | Channel ID containing server rules (for AI context) | `/modconfig set rules_channel #rules` |
 | `rules_message_id` | Message ID containing server rules (for AI context) | `/modconfig set rules_message_id 123456789` |
 
 ---
@@ -434,8 +435,16 @@ When reviewing an AI flag:
 
 **Configure Server Rules:**
 ```
+/modconfig set rules_channel #rules
+```
+
+Or with a specific message ID:
+```
 /modconfig set rules_message_id <message_id>
 ```
+
+When `rules_channel` is set, the AI reads pinned messages from that channel as server rules.
+When both `rules_channel` and `rules_message_id` are set, the AI fetches that specific message from the rules channel.
 
 To get message ID:
 1. Enable Developer Mode in Discord settings

@@ -310,7 +310,7 @@ def set_moderation_config(guild_id: str, parameter: str, value: str) -> None:
         "ai_confidence_threshold", "ai_flag_channel_id", "ai_model", 
         "ollama_host", "decay_multiplier", "warn_1_decay_days", 
         "warn_2_decay_days", "warn_3_decay_days", "mute_duration_warn_2", 
-        "mute_duration_warn_3", "rules_message_id"
+        "mute_duration_warn_3", "rules_message_id", "rules_channel_id"
     }
     
     if parameter not in valid_columns:

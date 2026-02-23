@@ -225,6 +225,7 @@ def create_database():
             mute_duration_warn_2 INTEGER DEFAULT 3600,
             mute_duration_warn_3 INTEGER DEFAULT 86400,
             rules_message_id TEXT,
+            rules_channel_id TEXT,
             created_at TEXT NOT NULL
         )
     """
