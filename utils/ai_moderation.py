@@ -23,6 +23,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_OLLAMA_HOST = os.getenv("ollama_host", "http://localhost:11434")
 DEFAULT_OLLAMA_MODEL = os.getenv("ollama_model", "llama2")
 
+# Context length limits to optimize AI response time
+MAX_MESSAGE_LENGTH = 1000
+MAX_RULES_LENGTH = 2000
+MAX_PROMPT_LENGTH = 4000
+
 
 async def analyze_message_with_ollama(
     message_content: str,
@@ -81,46 +86,32 @@ def _build_analysis_prompt(
 ) -> str:
     """Build the prompt for Ollama analysis."""
     # Truncate very long messages
-    if len(message_content) > 1000:
-        message_content = message_content[:1000] + "..."
+    if len(message_content) > MAX_MESSAGE_LENGTH:
+        message_content = message_content[:MAX_MESSAGE_LENGTH] + "..."
 
-    prompt = """You are a content moderation AI assistant for a Discord server. Your role is to help moderators identify potentially problematic messages. Be conservative and cautious - only flag messages that clearly violate rules or are harmful.
+    # Truncate server rules to limit context size
+    if server_rules and len(server_rules) > MAX_RULES_LENGTH:
+        server_rules = server_rules[:MAX_RULES_LENGTH] + "..."
 
-"""
+    prompt = "You are a Discord content moderation AI. Be conservative - only flag clearly problematic messages.\n\n"
 
     if server_rules:
-        prompt += f"""Server Rules:
-{server_rules}
+        prompt += f"Server Rules:\n{server_rules}\n\n"
 
+    prompt += f"""Message: "{message_content}"
+
+Score 0-100 (0-30: OK, 30-50: borderline, 50-70: likely violation, 70-100: clear violation).
+Category: Toxicity, Spam, NSFW, Harassment, Misinformation, or None.
+
+RESPOND EXACTLY AS:
+SCORE: [number]
+CATEGORY: [category]
+REASON: [one sentence]
 """
 
-    prompt += f"""Message to analyze:
-"{message_content}"
-
-Analyze this message and provide:
-1. A confidence score (0-100) indicating how likely this message violates the rules or is harmful
-   - 0-30: No violation (normal conversation)
-   - 30-50: Borderline (might be worth reviewing)
-   - 50-70: Likely violation (should be reviewed)
-   - 70-100: Clear violation (immediate attention needed)
-
-2. A category if problematic:
-   - Toxicity (insults, aggression, negativity)
-   - Spam (repetitive, promotional, low-value content)
-   - NSFW (adult content, inappropriate material)
-   - Harassment (targeted attacks, bullying)
-   - Misinformation (false or misleading information)
-   - None (no violation detected)
-
-3. A brief reason for your assessment (one sentence)
-
-FORMAT YOUR RESPONSE EXACTLY AS:
-SCORE: [number 0-100]
-CATEGORY: [category from list above]
-REASON: [brief explanation in one sentence]
-
-Be very conservative. Most messages are normal conversation and should score below 30.
-"""
+    # Final safety: truncate the total prompt if it exceeds the maximum
+    if len(prompt) > MAX_PROMPT_LENGTH:
+        prompt = prompt[:MAX_PROMPT_LENGTH]
 
     return prompt
 
@@ -290,13 +281,24 @@ async def get_server_rules(
                 pinned = await channel.pins()
                 if pinned:
                     rules_parts = []
+                    total_length = 0
                     for msg in reversed(pinned):  # Oldest first
+                        text = None
                         if msg.content:
-                            rules_parts.append(msg.content)
+                            text = msg.content
                         elif msg.embeds:
                             for embed in msg.embeds:
                                 if embed.description:
-                                    rules_parts.append(embed.description)
+                                    text = embed.description
+                                    break
+                        if text:
+                            if total_length + len(text) > MAX_RULES_LENGTH:
+                                remaining = MAX_RULES_LENGTH - total_length
+                                if remaining > 0:
+                                    rules_parts.append(text[:remaining] + "...")
+                                break
+                            rules_parts.append(text)
+                            total_length += len(text) + 2  # +2 for "\n\n" separator
                     if rules_parts:
                         return "\n\n".join(rules_parts)
             except (discord.Forbidden, discord.HTTPException):
