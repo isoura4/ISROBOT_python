@@ -13,6 +13,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from utils import moderation_utils
+from utils.security_fixes import escape_user_content, create_audit_log_message
 
 load_dotenv()
 
@@ -52,9 +53,22 @@ class Moderation(commands.Cog):
             user_id = str(user.id)
             moderator_id = str(interaction.user.id)
 
+            # Sanitize and escape user input
+            escaped_reason = escape_user_content(reason)
+            
+            # Create audit log entry
+            audit_msg = create_audit_log_message(
+                action="WARN",
+                actor=interaction.user,
+                target=user,
+                reason=reason,
+                details={"guild": interaction.guild.name}
+            )
+            logger.info(audit_msg)
+
             # Increment warning
             new_count = moderation_utils.increment_warning(
-                guild_id, user_id, moderator_id, reason
+                guild_id, user_id, moderator_id, escaped_reason
             )
 
             # Get config
@@ -64,7 +78,7 @@ class Moderation(commands.Cog):
             rules_link = None
             if config and config.get("rules_message_id"):
                 # We could construct a link, but for now we'll skip it
-                pass
+                logger.debug("Rules message ID configured but link construction not implemented")
 
             dm_embed = moderation_utils.create_warning_embed(
                 reason, new_count, interaction.guild.name, rules_link

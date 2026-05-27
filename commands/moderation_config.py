@@ -227,7 +227,7 @@ class ModerationConfig(commands.Cog):
             if channel and isinstance(channel, discord.TextChannel):
                 return channel_id
         except ValueError:
-            pass
+            logger.debug(f"Invalid channel ID provided: {value}")
         return None
 
     def _validate_boolean(self, value: str, guild: discord.Guild) -> int:
@@ -246,7 +246,7 @@ class ModerationConfig(commands.Cog):
             if 0 <= threshold <= 100:
                 return threshold
         except ValueError:
-            pass
+            logger.debug(f"Invalid threshold value provided: {value}")
         return None
 
     def _validate_positive_int(self, value: str, guild: discord.Guild) -> int:
@@ -256,7 +256,7 @@ class ModerationConfig(commands.Cog):
             if num > 0:
                 return num
         except ValueError:
-            pass
+            logger.debug(f"Invalid positive integer value provided: {value}")
         return None
 
     def _validate_string(self, value: str, guild: discord.Guild) -> str:

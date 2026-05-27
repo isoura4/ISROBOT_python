@@ -155,7 +155,7 @@ class XPSystem(commands.Cog):
                     await message.author.send(embed=embed, silent=True)
                 except discord.errors.Forbidden:
                     # L'utilisateur a désactivé les MP ou a bloqué le bot
-                    pass
+                    logger.debug(f"Cannot send DM to {message.author}: permission denied or blocked")
                 except Exception as e:
                     logger.warning(f"Erreur lors de l'envoi du message de level up à {message.author}: {e}")
 

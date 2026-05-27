@@ -127,7 +127,8 @@ class Stream(commands.Cog):
             for streamer in streamers:
                 # Logique de vérification du stream
                 # Cette méthode sera appelée périodiquement
-                pass
+                logger.debug(f"Checking stream status for {streamer.get('streamerName', 'unknown')}")
+                # TODO: Implement stream verification logic
         except Exception as e:
             logger.error(f"Erreur lors de la vérification des streams: {e}")
 
