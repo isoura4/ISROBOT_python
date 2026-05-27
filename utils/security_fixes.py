@@ -3,9 +3,11 @@ Security utilities for ISROBOT Discord Bot.
 Provides input sanitization, escaping, and validation functions.
 """
 
+import asyncio
 import logging
 import re
-from typing import Optional
+from functools import wraps
+from typing import Any, Callable, Optional
 
 import discord
 
@@ -201,3 +203,56 @@ def is_user_input_safe(content: str) -> tuple[bool, Optional[str]]:
             return False, f"Potential injection attempt detected: {pattern}"
     
     return True, None
+
+
+def with_timeout(timeout_seconds: float = 30) -> Callable:
+    """
+    Decorator to add timeout protection to async functions.
+    Prevents long-running operations from hanging indefinitely.
+    
+    Args:
+        timeout_seconds: Timeout in seconds
+        
+    Returns:
+        Decorated function with timeout protection
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> Any:
+            try:
+                return await asyncio.wait_for(
+                    func(*args, **kwargs),
+                    timeout=timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"Function {func.__name__} timed out after {timeout_seconds}s")
+                raise asyncio.TimeoutError(f"Operation timed out after {timeout_seconds} seconds")
+        return wrapper
+    return decorator
+
+
+async def run_with_timeout(
+    coro: Any,
+    timeout_seconds: float = 30,
+    timeout_message: str = "Operation timed out"
+) -> Any:
+    """
+    Run a coroutine with timeout protection.
+    
+    Args:
+        coro: The coroutine to run
+        timeout_seconds: Timeout in seconds
+        timeout_message: Error message if timeout occurs
+        
+    Returns:
+        Result from the coroutine
+        
+    Raises:
+        asyncio.TimeoutError: If the operation times out
+    """
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout_seconds)
+    except asyncio.TimeoutError:
+        logger.error(f"Async operation timed out after {timeout_seconds}s")
+        raise asyncio.TimeoutError(timeout_message)
+
