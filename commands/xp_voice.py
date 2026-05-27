@@ -38,8 +38,8 @@ class VoiceXP(commands.Cog):
         # Arrêter proprement la tâche quand le cog est déchargé
         try:
             self.voice_award_loop.cancel()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Error canceling voice_award_loop on unload: {e}")
 
     # --- Utilitaires DB & calcul de niveau ---
     def get_db_connection(self):

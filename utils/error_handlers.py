@@ -207,13 +207,15 @@ def handle_database_errors(func: Callable) -> Callable:
         try:
             return await func(*args, **kwargs)
         except sqlite3.OperationalError as e:
-            if "locked" in str(e).lower():
-                logger.warning(f"Database locked in {func.__name__}: {e}")
+            error_msg = str(e)
+            if "locked" in error_msg.lower():
+                logger.warning(f"Database locked in {func.__name__}: {error_msg}")
                 raise DatabaseLockedError("La base de données est occupée") from e
-            logger.error(f"Database operational error in {func.__name__}: {e}")
+            logger.error(f"Database operational error in {func.__name__}: {error_msg}")
             raise DatabaseError("Erreur de base de données") from e
         except sqlite3.Error as e:
-            logger.error(f"Database error in {func.__name__}: {e}")
+            error_msg = str(e)
+            logger.error(f"Database error in {func.__name__}: {error_msg}")
             raise DatabaseError("Erreur de base de données") from e
     return wrapper
 
@@ -221,6 +223,7 @@ def handle_database_errors(func: Callable) -> Callable:
 def handle_api_errors(service_name: str = "API") -> Callable:
     """
     Decorator factory to handle API errors with service-specific messages.
+    Sanitizes error messages to prevent credential exposure.
     
     Args:
         service_name: Name of the service (e.g., "Twitch", "YouTube", "Ollama")
@@ -234,7 +237,16 @@ def handle_api_errors(service_name: str = "API") -> Callable:
                 logger.warning(f"{service_name} timeout in {func.__name__}")
                 raise APITimeoutError(f"Délai d'attente {service_name} dépassé") from e
             except aiohttp.ClientError as e:
-                logger.error(f"{service_name} client error in {func.__name__}: {e}")
+                # Sanitize error message to prevent credential exposure
+                error_msg = str(e)
+                import re
+                sanitized_msg = re.sub(
+                    r'["\']?(?:key|token|api_key|access_token|secret)["\']?\s*[:=]\s*[^,\s}\]]+',
+                    '[REDACTED]',
+                    error_msg,
+                    flags=re.IGNORECASE
+                )
+                logger.error(f"{service_name} client error in {func.__name__}: {sanitized_msg}")
                 raise APIError(f"Erreur de connexion {service_name}") from e
         return wrapper
     return decorator

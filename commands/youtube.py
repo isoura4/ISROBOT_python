@@ -332,7 +332,7 @@ class CheckYouTubeChannel:
                     }
             elif response.status == 400:
                 # Si forHandle ne fonctionne pas, essayer forUsername (ancienne méthode)
-                pass
+                logger.debug("forHandle method failed (400), will try forUsername method")
             else:
                 # Autre erreur
                 error_data = (
