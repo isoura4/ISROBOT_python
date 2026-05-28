@@ -2,6 +2,8 @@
 
 This document explains how to run the ISROBOT Discord bot on the GameVox platform.
 
+> **Note:** GameVox is the official platform referenced in this migration guide. For the latest information and official documentation, visit [https://developers.gamevox.com](https://developers.gamevox.com)
+
 ## Overview
 
 GameVox is a modern voice, video, and text chat platform for gamers. This bot is now compatible with both Discord and GameVox without any code changes - you only need to configure two environment variables!
