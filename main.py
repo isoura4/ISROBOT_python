@@ -152,7 +152,12 @@ DB_PATH = os.getenv("db_path")
 # ============================================================================
 # Platform Configuration (Discord or GameVox)
 # ============================================================================
+# NOTE: This configuration MUST happen before the ISROBOT client is instantiated
+# (which occurs much later in the file). Modifying discord.py's global state here
+# ensures it uses the correct API endpoints when the client is created.
+
 # API version for both Discord and GameVox
+# Both platforms use the same Discord-compatible API version (v10)
 API_VERSION = "v10"
 API_VERSION_NUM = API_VERSION.lstrip("v")
 
@@ -177,6 +182,7 @@ if PLATFORM == "gamevox":
     )
     
     # Use GameVox token (validation already done in validate_environment_variables)
+    # Note: TOKEN is used throughout the rest of the file to pass to client.run()
     TOKEN = GAMEVOX_BOT_TOKEN
     logger.info("✅ GameVox bot token configured")
 else:
