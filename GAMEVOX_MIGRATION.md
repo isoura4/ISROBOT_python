@@ -33,7 +33,7 @@ Add or modify these environment variables in your `.env` file:
 PLATFORM=gamevox
 
 # Your GameVox bot token (from the developer portal)
-GAMEVOX_BOT_TOKEN=your_gamevox_token_here
+gamevox_bot_token=your_gamevox_token_here
 
 # Keep your Discord configuration for backwards compatibility
 app_id=123456789012345678

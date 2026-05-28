@@ -64,7 +64,7 @@ PLATFORM=discord
 
 # For GameVox:
 PLATFORM=gamevox
-GAMEVOX_BOT_TOKEN=your_gamevox_token_here
+gamevox_bot_token=your_gamevox_token_here
 ```
 
 For detailed GameVox migration instructions, see [GAMEVOX_MIGRATION.md](GAMEVOX_MIGRATION.md).
@@ -108,7 +108,7 @@ For detailed GameVox migration instructions, see [GAMEVOX_MIGRATION.md](GAMEVOX_
    server_id=YOUR_DISCORD_SERVER_ID
     
    # GameVox Configuration (required when PLATFORM=gamevox)
-   GAMEVOX_BOT_TOKEN=YOUR_GAMEVOX_BOT_TOKEN
+   gamevox_bot_token=YOUR_GAMEVOX_BOT_TOKEN
     
    # Database and Features
    db_path=database.sqlite3
