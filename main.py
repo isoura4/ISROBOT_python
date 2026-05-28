@@ -150,6 +150,9 @@ DB_PATH = os.getenv("db_path")
 # ============================================================================
 # Platform Configuration (Discord or GameVox)
 # ============================================================================
+# API version for both Discord and GameVox
+API_VERSION = "v10"
+
 PLATFORM = os.getenv("PLATFORM", "discord").lower()
 GAMEVOX_BOT_TOKEN = os.getenv("GAMEVOX_BOT_TOKEN")
 
@@ -158,22 +161,17 @@ if PLATFORM == "gamevox":
     logger.info("🎮 Configuring bot for GameVox platform")
     
     # Set the REST API base URL to GameVox
-    discord.http.Route.BASE = "https://bot-api.gamevox.com/api/v10"
+    discord.http.Route.BASE = f"https://bot-api.gamevox.com/api/{API_VERSION}"
     
     # Set the Gateway WebSocket URL to GameVox
     discord.gateway.DiscordWebSocket.DEFAULT_GATEWAY = (
-        "wss://gateway.gamevox.com/?v=10&encoding=json"
+        f"wss://gateway.gamevox.com/?v={API_VERSION.replace('v', '')}&encoding=json"
     )
     
-    # Use GameVox token if available, otherwise validate it's present
+    # Use GameVox token (validation already done in validate_environment_variables)
     if GAMEVOX_BOT_TOKEN:
         TOKEN = GAMEVOX_BOT_TOKEN
         logger.info("✅ GameVox bot token configured")
-    else:
-        logger.error("❌ GAMEVOX_BOT_TOKEN is required when PLATFORM=gamevox")
-        raise ValueError(
-            "GAMEVOX_BOT_TOKEN environment variable is required when using GameVox platform"
-        )
 else:
     logger.info("🤖 Configuring bot for Discord platform")
 
