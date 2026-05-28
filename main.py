@@ -17,11 +17,13 @@ from dotenv import load_dotenv
 import database
 
 # ============================================================================
-# GameVox Configuration - Point discord.py at GameVox instead of Discord
+# GameVox Configuration - Support for running on GameVox platform
 # ============================================================================
-# This must be set BEFORE creating the discord.Client
-# Uncomment the section below to use GameVox instead of Discord
-# and ensure GAMEVOX_BOT_TOKEN is set in your .env file
+# The bot supports both Discord and GameVox platforms.
+# Configure your platform using the PLATFORM environment variable:
+#   PLATFORM=discord  (default - connect to Discord)
+#   PLATFORM=gamevox  (connect to GameVox)
+# See the configuration section below for more details.
 
 
 # Répertoire racine du bot
