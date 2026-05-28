@@ -16,6 +16,14 @@ from dotenv import load_dotenv
 
 import database
 
+# ============================================================================
+# GameVox Configuration - Point discord.py at GameVox instead of Discord
+# ============================================================================
+# This must be set BEFORE creating the discord.Client
+# Uncomment the section below to use GameVox instead of Discord
+# and ensure GAMEVOX_BOT_TOKEN is set in your .env file
+
+
 # Répertoire racine du bot
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -77,12 +85,28 @@ if os.path.exists(os.path.join(_SCRIPT_DIR, ".env.example")):
 
 def validate_environment_variables():
     """Valide que toutes les variables d'environnement requises sont définies."""
+    # Determine platform
+    platform = os.getenv("PLATFORM", "discord").lower()
+    
+    # Common required variables for both platforms
     required_vars = {
-        "app_id": "L'ID de l'application Discord est requis",
-        "secret_key": "Le token du bot Discord est requis",
-        "server_id": "L'ID du serveur Discord est requis",
         "db_path": "Le chemin de la base de données est requis",
     }
+    
+    # Platform-specific required variables
+    if platform == "gamevox":
+        required_vars.update({
+            "app_id": "L'ID de l'application GameVox est requis",
+            "GAMEVOX_BOT_TOKEN": "Le token du bot GameVox est requis",
+            "server_id": "L'ID du serveur GameVox est requis",
+        })
+    else:
+        # Discord is the default
+        required_vars.update({
+            "app_id": "L'ID de l'application Discord est requis",
+            "secret_key": "Le token du bot Discord est requis",
+            "server_id": "L'ID du serveur Discord est requis",
+        })
     
     missing_vars = []
     invalid_vars = []
@@ -122,6 +146,36 @@ APP_ID = int(os.getenv("app_id", "0"))
 TOKEN = os.getenv("secret_key")
 SERVER_ID = int(os.getenv("server_id", "0"))
 DB_PATH = os.getenv("db_path")
+
+# ============================================================================
+# Platform Configuration (Discord or GameVox)
+# ============================================================================
+PLATFORM = os.getenv("PLATFORM", "discord").lower()
+GAMEVOX_BOT_TOKEN = os.getenv("GAMEVOX_BOT_TOKEN")
+
+# Configure discord.py for GameVox if PLATFORM is set to gamevox
+if PLATFORM == "gamevox":
+    logger.info("🎮 Configuring bot for GameVox platform")
+    
+    # Set the REST API base URL to GameVox
+    discord.http.Route.BASE = "https://bot-api.gamevox.com/api/v10"
+    
+    # Set the Gateway WebSocket URL to GameVox
+    discord.gateway.DiscordWebSocket.DEFAULT_GATEWAY = (
+        "wss://gateway.gamevox.com/?v=10&encoding=json"
+    )
+    
+    # Use GameVox token if available, otherwise validate it's present
+    if GAMEVOX_BOT_TOKEN:
+        TOKEN = GAMEVOX_BOT_TOKEN
+        logger.info("✅ GameVox bot token configured")
+    else:
+        logger.error("❌ GAMEVOX_BOT_TOKEN is required when PLATFORM=gamevox")
+        raise ValueError(
+            "GAMEVOX_BOT_TOKEN environment variable is required when using GameVox platform"
+        )
+else:
+    logger.info("🤖 Configuring bot for Discord platform")
 
 # Configuration des intents - Optimisé pour réduire la charge WebSocket
 intents = discord.Intents.default()

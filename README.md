@@ -1,6 +1,6 @@
-# ISROBOT - Discord Bot
+# ISROBOT - Discord & GameVox Bot
 
-A feature-rich Discord bot built with Python and discord.py, offering various interactive commands, mini-games, Twitch stream notifications, and AI integration.
+A feature-rich bot built with Python and discord.py, compatible with both Discord and GameVox platforms. Offers various interactive commands, mini-games, Twitch stream notifications, and AI integration.
 
 ## Features
 
@@ -54,6 +54,21 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 - **Ping**: Simple response command
 - **Bot Ping**: Check bot latency and connection status
 
+## 🎮 GameVox Platform Support
+
+This bot is compatible with **both Discord and GameVox** platforms! No code changes are needed - simply configure your platform:
+
+```env
+# For Discord (default):
+PLATFORM=discord
+
+# For GameVox:
+PLATFORM=gamevox
+GAMEVOX_BOT_TOKEN=your_gamevox_token_here
+```
+
+For detailed GameVox migration instructions, see [GAMEVOX_MIGRATION.md](GAMEVOX_MIGRATION.md).
+
 ## Installation
 
 ### Prerequisites
@@ -84,9 +99,18 @@ A feature-rich Discord bot built with Python and discord.py, offering various in
 4. **Create environment file**
    Create a `.env` file in the root directory with the following variables:
    ```env
+   # Platform selection (discord or gamevox)
+   PLATFORM=discord
+    
+   # Discord Configuration
    app_id=YOUR_BOT_APPLICATION_ID
    secret_key=YOUR_BOT_TOKEN
    server_id=YOUR_DISCORD_SERVER_ID
+    
+   # GameVox Configuration (required when PLATFORM=gamevox)
+   GAMEVOX_BOT_TOKEN=YOUR_GAMEVOX_BOT_TOKEN
+    
+   # Database and Features
    db_path=database.sqlite3
    twitch_client_id=YOUR_TWITCH_CLIENT_ID
    twitch_client_secret=YOUR_TWITCH_CLIENT_SECRET
