@@ -98,7 +98,7 @@ If the bot successfully connects and responds to commands, your migration is com
 
 ### Bot won't connect
 
-- **Check GAMEVOX_BOT_TOKEN**: Ensure it's correct and properly set in `.env`
+- **Check gamevox_bot_token**: Ensure it's correct and properly set in `.env`
 - **Check PLATFORM setting**: Verify `PLATFORM=gamevox` is set
 - **Check logs**: Look for error messages about token validation or API connectivity
 
