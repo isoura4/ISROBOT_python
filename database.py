@@ -284,7 +284,7 @@ def create_database():
     """
     )
 
-    # Table des canaux honeypot
+    # Honeypot channels table
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS honeypot_channels (
@@ -297,15 +297,15 @@ def create_database():
     """
     )
 
-    # Index pour les recherches de honeypots
+    # Index for honeypot lookups
     cursor.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_honeypot_guild 
+        CREATE INDEX IF NOT EXISTS idx_honeypot_guild
         ON honeypot_channels(guild_id)
     """
     )
 
-    # Table des violations de honeypot
+    # Honeypot violations table
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS honeypot_violations (
@@ -318,10 +318,10 @@ def create_database():
     """
     )
 
-    # Index pour les recherches de violations
+    # Index for violation lookups
     cursor.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_honeypot_violations_guild 
+        CREATE INDEX IF NOT EXISTS idx_honeypot_violations_guild
         ON honeypot_violations(guild_id)
     """
     )

@@ -89,12 +89,12 @@ def validate_environment_variables():
     """Valide que toutes les variables d'environnement requises sont définies."""
     # Determine platform
     platform = os.getenv("PLATFORM", "discord").lower()
-    
+
     # Common required variables for both platforms
     required_vars = {
         "db_path": "Le chemin de la base de données est requis",
     }
-    
+
     # Platform-specific required variables
     if platform == "gamevox":
         required_vars.update({
@@ -109,10 +109,10 @@ def validate_environment_variables():
             "secret_key": "Le token du bot Discord est requis",
             "server_id": "L'ID du serveur Discord est requis",
         })
-    
+
     missing_vars = []
     invalid_vars = []
-    
+
     for var_name, error_msg in required_vars.items():
         value = os.getenv(var_name)
         if not value:
@@ -125,7 +125,7 @@ def validate_environment_variables():
                     invalid_vars.append(f"  - {var_name}: Doit être un nombre positif")
             except ValueError:
                 invalid_vars.append(f"  - {var_name}: Doit être un nombre valide")
-    
+
     if missing_vars or invalid_vars:
         error_message = "❌ Erreur de configuration:\n"
         if missing_vars:
@@ -172,15 +172,15 @@ GAMEVOX_BOT_TOKEN = os.getenv("gamevox_bot_token")
 # Configure discord.py for GameVox if PLATFORM is set to gamevox
 if PLATFORM == "gamevox":
     logger.info("🎮 Configuring bot for GameVox platform")
-    
+
     # Set the REST API base URL to GameVox
     discord.http.Route.BASE = f"{GAMEVOX_API_BASE}/api/{API_VERSION}"
-    
+
     # Set the Gateway WebSocket URL to GameVox
     discord.gateway.DiscordWebSocket.DEFAULT_GATEWAY = (
         f"{GAMEVOX_GATEWAY_BASE}/?v={API_VERSION_NUM}&encoding=json"
     )
-    
+
     # Use GameVox token (validation already done in validate_environment_variables)
     # Note: TOKEN is used throughout the rest of the file to pass to client.run()
     TOKEN = GAMEVOX_BOT_TOKEN
@@ -231,7 +231,7 @@ class ISROBOT(commands.Bot):
         # Créer une session HTTP pour les requêtes API avec timeout
         timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=15)
         self.session = aiohttp.ClientSession(timeout=timeout)
-        
+
         # Configure global error handler for app commands
         self.tree.on_error = self.on_app_command_error
 
@@ -315,10 +315,10 @@ class ISROBOT(commands.Bot):
         # Démarrer les tâches de modération en arrière-plan
         self.warning_decay_task = self.loop.create_task(self.warning_decay_loop())
         self.mute_expiration_task = self.loop.create_task(self.mute_expiration_loop())
-        
+
         # Démarrer la tâche de sauvegarde automatique
         self.backup_task = self.loop.create_task(self.scheduled_backup_loop())
-        
+
         # Démarrer la tâche de nettoyage du rate limiter
         self.rate_limit_cleanup_task = self.loop.create_task(self.rate_limit_cleanup_loop())
 
@@ -882,7 +882,7 @@ class ISROBOT(commands.Bot):
     async def warning_decay_loop(self):
         """
         Vérifier périodiquement et faire expirer les avertissements.
-        
+
         Note: There's a theoretical race condition if a moderator manually
         decrements warnings while this loop is running. However, this is
         acceptable because:
@@ -1048,7 +1048,7 @@ class ISROBOT(commands.Bot):
         while not self.is_closed():
             try:
                 from utils.backup import scheduled_backup, auto_recover_database
-                
+
                 # Check database integrity first
                 is_healthy = auto_recover_database()
                 if not is_healthy:
@@ -1057,14 +1057,14 @@ class ISROBOT(commands.Bot):
                         "Le bot continue de fonctionner mais certaines fonctionnalités peuvent échouer. "
                         "Intervention manuelle requise."
                     )
-                
+
                 # Create scheduled backup
                 backup_path = await scheduled_backup()
                 if backup_path:
                     logger.info(f"[Backup] Sauvegarde automatique créée: {backup_path.name}")
                 else:
                     logger.warning("[Backup] La sauvegarde automatique a échoué")
-                    
+
             except Exception as e:
                 logger.error(f"Erreur lors de la sauvegarde automatique: {e}")
 
@@ -1081,7 +1081,7 @@ class ISROBOT(commands.Bot):
                 from utils.security import rate_limiter
                 rate_limiter.cleanup()
                 logger.debug("Nettoyage du rate limiter effectué")
-                
+
             except Exception as e:
                 logger.error(f"Erreur lors du nettoyage du rate limiter: {e}")
 
@@ -1089,27 +1089,27 @@ class ISROBOT(commands.Bot):
             await asyncio.sleep(600)
 
     async def on_app_command_error(
-        self, 
-        interaction: discord.Interaction, 
+        self,
+        interaction: discord.Interaction,
         error: app_commands.AppCommandError
     ):
         """Global error handler for app commands (slash commands)."""
         from utils.error_handlers import handle_interaction_error, classify_error
-        
+
         # Unwrap the error if it's wrapped
         original_error = error
         if hasattr(error, 'original'):
             original_error = error.original
-        
+
         # Log the error
         error_key, _ = classify_error(original_error)
         command_name = interaction.command.name if interaction.command else "unknown"
-        
+
         logger.error(
             f"App command error in /{command_name}: [{error_key}] {original_error}",
             exc_info=original_error if error_key == "unknown_error" else None
         )
-        
+
         # Handle the error and send user-friendly message
         await handle_interaction_error(interaction, original_error)
 
@@ -1160,9 +1160,9 @@ class ISROBOT(commands.Bot):
                             description="This action is not allowed in this channel.",
                             color=discord.Color.red(),
                         )
-                        
+
                         warning_msg = await message.channel.send(embed=embed)
-                        
+
                         # Delete messages after 10 seconds
                         await asyncio.sleep(10)
                         try:
@@ -1173,7 +1173,7 @@ class ISROBOT(commands.Bot):
                             await warning_msg.delete()
                         except (discord.NotFound, discord.Forbidden):
                             pass
-                        
+
                     except Exception as e:
                         logger.error(f"Error sending honeypot warning message: {e}")
 
@@ -1208,7 +1208,7 @@ class ISROBOT(commands.Bot):
             from utils.ai_toggle import check_ai_enabled
 
             guild_id = str(message.guild.id)
-            
+
             # Check global AI toggle first
             if not check_ai_enabled("moderation"):
                 pass  # AI moderation is globally disabled, skip analysis
@@ -1294,7 +1294,7 @@ class ISROBOT(commands.Bot):
         # Only check if it's a digit before acquiring the lock
         if not (message.content.isdigit() and not str(message.content).isspace()):
             return
-        
+
         # Validate the number is within reasonable bounds to prevent integer overflow
         try:
             number = int(message.content)
@@ -1375,7 +1375,7 @@ class ISROBOT(commands.Bot):
     async def close(self):
         """Fermer proprement la session HTTP quand le bot se ferme."""
         logger.info("Démarrage de l'arrêt gracieux du bot...")
-        
+
         # Arrêter la tâche de vérification des streams
         if hasattr(self, "stream_check_task") and not self.stream_check_task.done():
             logger.info("Arrêt de la tâche de vérification Twitch...")
@@ -1397,11 +1397,11 @@ class ISROBOT(commands.Bot):
 
         if hasattr(self, "mute_expiration_task"):
             self.mute_expiration_task.cancel()
-        
+
         # Arrêter la tâche de sauvegarde automatique
         if hasattr(self, "backup_task"):
             self.backup_task.cancel()
-        
+
         # Arrêter la tâche de nettoyage du rate limiter
         if hasattr(self, "rate_limit_cleanup_task"):
             self.rate_limit_cleanup_task.cancel()
@@ -1409,7 +1409,7 @@ class ISROBOT(commands.Bot):
         if self.session:
             await self.session.close()
             logger.info("Session HTTP fermée")
-        
+
         logger.info("Arrêt du bot...")
         await super().close()
         logger.info("Bot arrêté avec succès")

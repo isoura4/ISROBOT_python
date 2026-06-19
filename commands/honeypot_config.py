@@ -26,13 +26,13 @@ class HoneypotConfig(commands.Cog):
 
     honeypot = app_commands.Group(
         name="honeypot",
-        description="Configurer les canaux honeypot",
+        description="Configure honeypot channels",
         guild_ids=[SERVER_ID]
     )
 
-    @honeypot.command(name="add", description="Ajouter un canal honeypot")
+    @honeypot.command(name="add", description="Add a honeypot channel")
     @app_commands.describe(
-        channel="Le canal à ajouter en tant que honeypot"
+        channel="The channel to add as a honeypot"
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def add_honeypot(
@@ -79,9 +79,9 @@ class HoneypotConfig(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @honeypot.command(name="remove", description="Retirer un canal honeypot")
+    @honeypot.command(name="remove", description="Remove a honeypot channel")
     @app_commands.describe(
-        channel="Le canal à retirer en tant que honeypot"
+        channel="The channel to remove from honeypot"
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def remove_honeypot(
@@ -123,7 +123,7 @@ class HoneypotConfig(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @honeypot.command(name="list", description="Lister les canaux honeypot")
+    @honeypot.command(name="list", description="List honeypot channels")
     @app_commands.checks.has_permissions(administrator=True)
     async def list_honeypots(self, interaction: discord.Interaction):
         """List all honeypot channels in the guild."""
@@ -170,7 +170,7 @@ class HoneypotConfig(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @honeypot.command(name="stats", description="Afficher les statistiques des honeypots")
+    @honeypot.command(name="stats", description="Display honeypot statistics")
     @app_commands.checks.has_permissions(administrator=True)
     async def honeypot_stats(self, interaction: discord.Interaction):
         """Show honeypot statistics for the guild."""
@@ -199,9 +199,9 @@ class HoneypotConfig(commands.Cog):
             for channel_id in honeypot_channels:
                 channel = interaction.guild.get_channel(int(channel_id))
                 stats = moderation_utils.get_honeypot_stats(guild_id, channel_id)
-                
+
                 total_violations += stats["violation_count"]
-                
+
                 if channel:
                     stats_lines.append(
                         f"**{channel.mention}**\n"
@@ -210,7 +210,7 @@ class HoneypotConfig(commands.Cog):
                     )
 
             embed.description = "\n".join(stats_lines) if stats_lines else "Aucune statistique disponible."
-            
+
             embed.add_field(
                 name="📈 Total",
                 value=f"**{total_violations}** violation(s)",

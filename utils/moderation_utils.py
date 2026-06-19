@@ -69,8 +69,8 @@ def increment_warning(
         # Log to history
         cursor.execute(
             """
-            INSERT INTO warning_history 
-            (guild_id, user_id, action, warn_count_before, warn_count_after, 
+            INSERT INTO warning_history
+            (guild_id, user_id, action, warn_count_before, warn_count_after,
              moderator_id, reason, created_at)
             VALUES (?, ?, 'warn_issued', ?, ?, ?, ?, ?)
         """,
@@ -110,7 +110,7 @@ def decrement_warning(
         # Update warning record
         cursor.execute(
             """
-            UPDATE warnings 
+            UPDATE warnings
             SET warn_count = ?, updated_at = ?
             WHERE guild_id = ? AND user_id = ?
         """,
@@ -120,8 +120,8 @@ def decrement_warning(
         # Log to history
         cursor.execute(
             """
-            INSERT INTO warning_history 
-            (guild_id, user_id, action, warn_count_before, warn_count_after, 
+            INSERT INTO warning_history
+            (guild_id, user_id, action, warn_count_before, warn_count_after,
              moderator_id, reason, created_at)
             VALUES (?, ?, 'warn_decreased', ?, ?, ?, ?, ?)
         """,
@@ -137,12 +137,12 @@ def decrement_warning(
 def get_warning_history(guild_id: str, user_id: str, limit: int = 100) -> list:
     """
     Get warning history for a user.
-    
+
     Args:
         guild_id: The guild ID
         user_id: The user ID
         limit: Maximum number of entries to return (default 100)
-    
+
     Returns:
         List of warning history entries, most recent first
     """
@@ -151,7 +151,7 @@ def get_warning_history(guild_id: str, user_id: str, limit: int = 100) -> list:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT * FROM warning_history 
+            SELECT * FROM warning_history
             WHERE guild_id = ? AND user_id = ?
             ORDER BY created_at DESC
             LIMIT ?
@@ -179,7 +179,7 @@ def add_mute(
 
         cursor.execute(
             """
-            INSERT INTO active_mutes 
+            INSERT INTO active_mutes
             (guild_id, user_id, moderator_id, reason, expires_at, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(guild_id, user_id) DO UPDATE SET
@@ -205,8 +205,8 @@ def add_mute(
         # Log to history
         cursor.execute(
             """
-            INSERT INTO warning_history 
-            (guild_id, user_id, action, warn_count_before, warn_count_after, 
+            INSERT INTO warning_history
+            (guild_id, user_id, action, warn_count_before, warn_count_after,
              moderator_id, reason, created_at)
             VALUES (?, ?, 'mute_applied', 0, 0, ?, ?, ?)
         """,
@@ -248,8 +248,8 @@ def remove_mute(
         # Log to history
         cursor.execute(
             """
-            INSERT INTO warning_history 
-            (guild_id, user_id, action, warn_count_before, warn_count_after, 
+            INSERT INTO warning_history
+            (guild_id, user_id, action, warn_count_before, warn_count_after,
              moderator_id, reason, created_at)
             VALUES (?, ?, 'mute_removed', 0, 0, ?, ?, ?)
         """,
@@ -307,16 +307,16 @@ def set_moderation_config(guild_id: str, parameter: str, value: str) -> None:
     """Set a moderation configuration parameter for a guild."""
     # Allowlist of valid column names
     valid_columns = {
-        "log_channel_id", "appeal_channel_id", "ai_enabled", 
-        "ai_confidence_threshold", "ai_flag_channel_id", "ai_model", 
-        "ollama_host", "decay_multiplier", "warn_1_decay_days", 
-        "warn_2_decay_days", "warn_3_decay_days", "mute_duration_warn_2", 
+        "log_channel_id", "appeal_channel_id", "ai_enabled",
+        "ai_confidence_threshold", "ai_flag_channel_id", "ai_model",
+        "ollama_host", "decay_multiplier", "warn_1_decay_days",
+        "warn_2_decay_days", "warn_3_decay_days", "mute_duration_warn_2",
         "mute_duration_warn_3", "rules_message_id"
     }
-    
+
     if parameter not in valid_columns:
         raise ValueError(f"Invalid parameter: {parameter}")
-    
+
     conn = database.get_db_connection()
     try:
         cursor = conn.cursor()
@@ -424,7 +424,7 @@ def create_appeal(
         # Check for existing pending appeal
         cursor.execute(
             """
-            SELECT id FROM moderation_appeals 
+            SELECT id FROM moderation_appeals
             WHERE guild_id = ? AND user_id = ? AND status = 'pending'
         """,
             (guild_id, user_id),
@@ -435,7 +435,7 @@ def create_appeal(
         # Create appeal
         cursor.execute(
             """
-            INSERT INTO moderation_appeals 
+            INSERT INTO moderation_appeals
             (guild_id, user_id, appeal_reason, status, created_at)
             VALUES (?, ?, ?, 'pending', ?)
         """,
@@ -445,8 +445,8 @@ def create_appeal(
         # Log to history
         cursor.execute(
             """
-            INSERT INTO warning_history 
-            (guild_id, user_id, action, warn_count_before, warn_count_after, 
+            INSERT INTO warning_history
+            (guild_id, user_id, action, warn_count_before, warn_count_after,
              moderator_id, reason, created_at)
             VALUES (?, ?, 'appeal_created', 0, 0, NULL, ?, ?)
         """,
@@ -466,7 +466,7 @@ def get_pending_appeals(guild_id: str) -> list:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT * FROM moderation_appeals 
+            SELECT * FROM moderation_appeals
             WHERE guild_id = ? AND status = 'pending'
             ORDER BY created_at ASC
         """,
@@ -488,7 +488,7 @@ def check_appeal_cooldown(guild_id: str, user_id: str) -> Optional[timedelta]:
         # Get last appeal created time
         cursor.execute(
             """
-            SELECT created_at FROM moderation_appeals 
+            SELECT created_at FROM moderation_appeals
             WHERE guild_id = ? AND user_id = ?
             ORDER BY created_at DESC
             LIMIT 1
@@ -496,14 +496,14 @@ def check_appeal_cooldown(guild_id: str, user_id: str) -> Optional[timedelta]:
             (guild_id, user_id),
         )
         result = cursor.fetchone()
-        
+
         if not result:
             return None
-        
+
         last_appeal = datetime.fromisoformat(result["created_at"])
         time_since = datetime.now(timezone.utc) - last_appeal
         cooldown = timedelta(hours=48)
-        
+
         if time_since < cooldown:
             return cooldown - time_since
         return None
@@ -538,7 +538,7 @@ def review_appeal(
         # Update appeal
         cursor.execute(
             """
-            UPDATE moderation_appeals 
+            UPDATE moderation_appeals
             SET status = ?, moderator_id = ?, moderator_decision = ?, reviewed_at = ?
             WHERE id = ?
         """,
@@ -548,8 +548,8 @@ def review_appeal(
         # Log to history
         cursor.execute(
             """
-            INSERT INTO warning_history 
-            (guild_id, user_id, action, warn_count_before, warn_count_after, 
+            INSERT INTO warning_history
+            (guild_id, user_id, action, warn_count_before, warn_count_after,
              moderator_id, reason, created_at)
             VALUES (?, ?, 'appeal_reviewed', 0, 0, ?, ?, ?)
         """,
@@ -791,7 +791,7 @@ def add_honeypot_channel(guild_id: str, channel_id: str) -> bool:
     try:
         cursor = conn.cursor()
         now = _get_utc_timestamp()
-        
+
         try:
             cursor.execute(
                 """
@@ -849,7 +849,7 @@ def log_honeypot_violation(guild_id: str, user_id: str, channel_id: str) -> None
     try:
         cursor = conn.cursor()
         now = _get_utc_timestamp()
-        
+
         # Insert violation record
         cursor.execute(
             """
@@ -858,17 +858,17 @@ def log_honeypot_violation(guild_id: str, user_id: str, channel_id: str) -> None
         """,
             (guild_id, user_id, channel_id, now),
         )
-        
+
         # Increment violation counter for the channel
         cursor.execute(
             """
-            UPDATE honeypot_channels 
-            SET violation_count = violation_count + 1 
+            UPDATE honeypot_channels
+            SET violation_count = violation_count + 1
             WHERE guild_id = ? AND channel_id = ?
         """,
             (guild_id, channel_id),
         )
-        
+
         conn.commit()
     finally:
         conn.close()
@@ -879,7 +879,7 @@ def get_honeypot_stats(guild_id: str, channel_id: str) -> dict:
     conn = database.get_db_connection()
     try:
         cursor = conn.cursor()
-        
+
         # Get channel violation count
         cursor.execute(
             "SELECT violation_count FROM honeypot_channels WHERE guild_id = ? AND channel_id = ?",
@@ -887,19 +887,19 @@ def get_honeypot_stats(guild_id: str, channel_id: str) -> dict:
         )
         result = cursor.fetchone()
         violation_count = result["violation_count"] if result else 0
-        
+
         # Get unique users caught
         cursor.execute(
             """
-            SELECT COUNT(DISTINCT user_id) as unique_users 
-            FROM honeypot_violations 
+            SELECT COUNT(DISTINCT user_id) as unique_users
+            FROM honeypot_violations
             WHERE guild_id = ? AND channel_id = ?
         """,
             (guild_id, channel_id),
         )
         result = cursor.fetchone()
         unique_users = result["unique_users"] if result else 0
-        
+
         return {
             "violation_count": violation_count,
             "unique_users": unique_users,
