@@ -328,7 +328,7 @@ def create_database():
 
     cursor.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_honeypot_violations_user 
+        CREATE INDEX IF NOT EXISTS idx_honeypot_violations_user
         ON honeypot_violations(guild_id, user_id)
     """
     )

@@ -193,7 +193,6 @@ class HoneypotConfig(commands.Cog):
 
             # Calculate total stats
             total_violations = 0
-            total_users = set()
             stats_lines = []
 
             for channel_id in honeypot_channels:

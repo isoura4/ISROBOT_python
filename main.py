@@ -1193,7 +1193,7 @@ class ISROBOT(commands.Bot):
                         logger.error(f"Error performing honeypot softban: {e}")
 
                 # Create and track the task
-                self.bot.loop.create_task(cleanup_and_kick())
+                self.loop.create_task(cleanup_and_kick())
 
                 # Stop processing this message
                 return
