@@ -872,6 +872,73 @@ def ensure_table_columns(db_path=None):
         conn.close()
 
 
+def create_honeypot_tables(db_path=None):
+    """Create honeypot-related tables if they don't exist."""
+    conn = get_db_connection(db_path)
+    cursor = conn.cursor()
+
+    try:
+        # Table des canaux honeypot
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS honeypot_channels (
+                guild_id TEXT NOT NULL,
+                channel_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                violation_count INTEGER DEFAULT 0,
+                PRIMARY KEY (guild_id, channel_id)
+            )
+        """
+        )
+
+        # Index pour les recherches de honeypots
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_honeypot_guild 
+            ON honeypot_channels(guild_id)
+        """
+        )
+
+        # Table des violations de honeypot
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS honeypot_violations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                channel_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            )
+        """
+        )
+
+        # Index pour les recherches de violations
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_honeypot_violations_guild 
+            ON honeypot_violations(guild_id)
+        """
+        )
+
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_honeypot_violations_user 
+            ON honeypot_violations(guild_id, user_id)
+        """
+        )
+
+        conn.commit()
+        logger.info("Honeypot tables created successfully.")
+        return True
+
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error creating honeypot tables: {e}")
+        return False
+    finally:
+        conn.close()
+
+
 def run_all_migrations(db_path=None):
     """Run all migrations in order."""
     logger.info("Starting database migrations...")
@@ -889,6 +956,10 @@ def run_all_migrations(db_path=None):
 
     if not create_minigame_tables(db_path):
         logger.error("Failed to create minigame tables")
+        success = False
+
+    if not create_honeypot_tables(db_path):
+        logger.error("Failed to create honeypot tables")
         success = False
 
     if success:

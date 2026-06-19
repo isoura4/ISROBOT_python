@@ -4,6 +4,7 @@ Handles database operations, notifications, and helper functions.
 """
 
 import logging
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -757,3 +758,161 @@ def parse_duration(duration_str: str) -> Optional[int]:
         total_seconds += int(seconds_match.group(1))
 
     return total_seconds if total_seconds > 0 else None
+
+
+# --- Honeypot Functions ---
+
+
+def is_honeypot_channel(guild_id: str, channel_id: str) -> bool:
+    """Check if a channel is a honeypot channel."""
+    conn = database.get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT 1 FROM honeypot_channels WHERE guild_id = ? AND channel_id = ?",
+            (guild_id, channel_id),
+        )
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
+
+def add_honeypot_channel(guild_id: str, channel_id: str) -> bool:
+    """
+    Add a channel as a honeypot channel.
+    Returns True if successful, False if already exists.
+    """
+    conn = database.get_db_connection()
+    try:
+        cursor = conn.cursor()
+        now = datetime.now(timezone.utc).isoformat()
+        
+        try:
+            cursor.execute(
+                """
+                INSERT INTO honeypot_channels (guild_id, channel_id, created_at)
+                VALUES (?, ?, ?)
+            """,
+                (guild_id, channel_id, now),
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            # Channel already exists as honeypot
+            return False
+    finally:
+        conn.close()
+
+
+def remove_honeypot_channel(guild_id: str, channel_id: str) -> bool:
+    """
+    Remove a channel from honeypot channels.
+    Returns True if successful, False if not found.
+    """
+    conn = database.get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM honeypot_channels WHERE guild_id = ? AND channel_id = ?",
+            (guild_id, channel_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def get_honeypot_channels(guild_id: str) -> list[str]:
+    """Get all honeypot channels for a guild."""
+    conn = database.get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT channel_id FROM honeypot_channels WHERE guild_id = ? ORDER BY created_at",
+            (guild_id,),
+        )
+        return [row["channel_id"] for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def log_honeypot_violation(guild_id: str, user_id: str, channel_id: str) -> None:
+    """
+    Log a honeypot violation and increment violation counter.
+    """
+    conn = database.get_db_connection()
+    try:
+        cursor = conn.cursor()
+        now = datetime.now(timezone.utc).isoformat()
+        
+        # Insert violation record
+        cursor.execute(
+            """
+            INSERT INTO honeypot_violations (guild_id, user_id, channel_id, timestamp)
+            VALUES (?, ?, ?, ?)
+        """,
+            (guild_id, user_id, channel_id, now),
+        )
+        
+        # Increment violation counter for the channel
+        cursor.execute(
+            """
+            UPDATE honeypot_channels 
+            SET violation_count = violation_count + 1 
+            WHERE guild_id = ? AND channel_id = ?
+        """,
+            (guild_id, channel_id),
+        )
+        
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_honeypot_stats(guild_id: str, channel_id: str) -> dict:
+    """Get violation statistics for a honeypot channel."""
+    conn = database.get_db_connection()
+    try:
+        cursor = conn.cursor()
+        
+        # Get channel violation count
+        cursor.execute(
+            "SELECT violation_count FROM honeypot_channels WHERE guild_id = ? AND channel_id = ?",
+            (guild_id, channel_id),
+        )
+        result = cursor.fetchone()
+        violation_count = result["violation_count"] if result else 0
+        
+        # Get unique users caught
+        cursor.execute(
+            """
+            SELECT COUNT(DISTINCT user_id) as unique_users 
+            FROM honeypot_violations 
+            WHERE guild_id = ? AND channel_id = ?
+        """,
+            (guild_id, channel_id),
+        )
+        result = cursor.fetchone()
+        unique_users = result["unique_users"] if result else 0
+        
+        return {
+            "violation_count": violation_count,
+            "unique_users": unique_users,
+        }
+    finally:
+        conn.close()
+
+
+def get_user_honeypot_violations(guild_id: str, user_id: str) -> int:
+    """Get the number of times a user has been caught in honeypot channels."""
+    conn = database.get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM honeypot_violations WHERE guild_id = ? AND user_id = ?",
+            (guild_id, user_id),
+        )
+        result = cursor.fetchone()
+        return result["count"] if result else 0
+    finally:
+        conn.close()

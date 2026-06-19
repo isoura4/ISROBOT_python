@@ -1138,6 +1138,65 @@ class ISROBOT(commands.Bot):
         if not message.guild:
             return
 
+        # --- HONEYPOT CHECK ---
+        # Check if message is in a honeypot channel and softban the user
+        try:
+            from utils import moderation_utils
+
+            guild_id = str(message.guild.id)
+            channel_id = str(message.channel.id)
+
+            if moderation_utils.is_honeypot_channel(guild_id, channel_id):
+                # Log the violation
+                moderation_utils.log_honeypot_violation(guild_id, str(message.author.id), channel_id)
+
+                try:
+                    # Send warning message
+                    embed = discord.Embed(
+                        title="⚠️ DO NOT SEND MESSAGES IN THIS CHANNEL",
+                        description="This channel is used to catch spam bots. Any messages sent here will result in a softban.",
+                        color=discord.Color.red(),
+                    )
+                    embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1234567890123456789.png")
+                    
+                    warning_msg = await message.channel.send(embed=embed)
+                    
+                    # Delete both the user message and warning after 10 seconds
+                    async def cleanup():
+                        try:
+                            await message.delete()
+                            await warning_msg.delete()
+                        except discord.NotFound:
+                            pass
+                    
+                    # Schedule cleanup
+                    import asyncio
+                    asyncio.create_task(asyncio.sleep(10))
+                    
+                except Exception as e:
+                    logger.error(f"Erreur lors de l'envoi du message d'avertissement honeypot: {e}")
+
+                # Softban (kick) the user
+                try:
+                    await message.guild.kick(
+                        message.author,
+                        reason="Honeypot violation - Message sent in honeypot channel"
+                    )
+                    logger.info(
+                        f"User {message.author.id} ({message.author.name}) kicked from honeypot channel "
+                        f"{channel_id} in guild {guild_id}"
+                    )
+                except discord.Forbidden:
+                    logger.error(f"Bot does not have permission to kick user {message.author.id}")
+                except Exception as e:
+                    logger.error(f"Erreur lors du softban du honeypot: {e}")
+
+                # Stop processing this message
+                return
+
+        except Exception as e:
+            logger.error(f"Erreur lors de la vérification honeypot: {e}")
+
         # --- AI MODERATION ---
         # Analyze message with AI if enabled and not in counter game
         try:

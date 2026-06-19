@@ -284,6 +284,55 @@ def create_database():
     """
     )
 
+    # Table des canaux honeypot
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS honeypot_channels (
+            guild_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            violation_count INTEGER DEFAULT 0,
+            PRIMARY KEY (guild_id, channel_id)
+        )
+    """
+    )
+
+    # Index pour les recherches de honeypots
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_honeypot_guild 
+        ON honeypot_channels(guild_id)
+    """
+    )
+
+    # Table des violations de honeypot
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS honeypot_violations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            timestamp TEXT NOT NULL
+        )
+    """
+    )
+
+    # Index pour les recherches de violations
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_honeypot_violations_guild 
+        ON honeypot_violations(guild_id)
+    """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_honeypot_violations_user 
+        ON honeypot_violations(guild_id, user_id)
+    """
+    )
+
     conn.commit()
     conn.close()
 
