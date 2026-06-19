@@ -1150,18 +1150,20 @@ class ISROBOT(commands.Bot):
                 # Log the violation
                 moderation_utils.log_honeypot_violation(guild_id, str(message.author.id), channel_id)
 
-                # Send warning message
-                try:
-                    embed = discord.Embed(
-                        title="⚠️ DO NOT SEND MESSAGES IN THIS CHANNEL",
-                        description="This channel is used to catch spam bots. Any messages sent here will result in a softban.",
-                        color=discord.Color.red(),
-                    )
-                    
-                    warning_msg = await message.channel.send(embed=embed)
-                    
-                    # Schedule cleanup of messages after 10 seconds
-                    async def cleanup_messages():
+                # Track the cleanup task properly
+                async def cleanup_and_kick():
+                    # Send warning message
+                    try:
+                        # Keep the warning minimal to avoid tipping off bots
+                        embed = discord.Embed(
+                            title="⚠️ Warning",
+                            description="This action is not allowed in this channel.",
+                            color=discord.Color.red(),
+                        )
+                        
+                        warning_msg = await message.channel.send(embed=embed)
+                        
+                        # Delete messages after 10 seconds
                         await asyncio.sleep(10)
                         try:
                             await message.delete()
@@ -1171,32 +1173,33 @@ class ISROBOT(commands.Bot):
                             await warning_msg.delete()
                         except (discord.NotFound, discord.Forbidden):
                             pass
-                    
-                    asyncio.create_task(cleanup_messages())
-                    
-                except Exception as e:
-                    logger.error(f"Erreur lors de l'envoi du message d'avertissement honeypot: {e}")
+                        
+                    except Exception as e:
+                        logger.error(f"Error sending honeypot warning message: {e}")
 
-                # Softban (kick) the user
-                try:
-                    await message.guild.kick(
-                        message.author,
-                        reason="Honeypot violation - Message sent in honeypot channel"
-                    )
-                    logger.info(
-                        f"User {message.author.id} ({message.author.name}) kicked from honeypot channel "
-                        f"{channel_id} in guild {guild_id}"
-                    )
-                except discord.Forbidden:
-                    logger.error(f"Bot does not have permission to kick user {message.author.id}")
-                except Exception as e:
-                    logger.error(f"Erreur lors du softban du honeypot: {e}")
+                    # Softban (kick) the user
+                    try:
+                        await message.guild.kick(
+                            message.author,
+                            reason="Honeypot violation - Message sent in honeypot channel"
+                        )
+                        logger.info(
+                            f"User {message.author.id} ({message.author.name}) kicked from honeypot channel "
+                            f"{channel_id} in guild {guild_id}"
+                        )
+                    except discord.Forbidden:
+                        logger.error(f"Bot does not have permission to kick user {message.author.id}")
+                    except Exception as e:
+                        logger.error(f"Error performing honeypot softban: {e}")
+
+                # Create and track the task
+                self.bot.loop.create_task(cleanup_and_kick())
 
                 # Stop processing this message
                 return
 
         except Exception as e:
-            logger.error(f"Erreur lors de la vérification honeypot: {e}")
+            logger.error(f"Error during honeypot check: {e}")
 
         # --- AI MODERATION ---
         # Analyze message with AI if enabled and not in counter game

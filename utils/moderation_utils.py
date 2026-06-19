@@ -763,6 +763,11 @@ def parse_duration(duration_str: str) -> Optional[int]:
 # --- Honeypot Functions ---
 
 
+def _get_utc_timestamp() -> str:
+    """Get current UTC timestamp in ISO format."""
+    return datetime.now(timezone.utc).isoformat()
+
+
 def is_honeypot_channel(guild_id: str, channel_id: str) -> bool:
     """Check if a channel is a honeypot channel."""
     conn = database.get_db_connection()
@@ -785,7 +790,7 @@ def add_honeypot_channel(guild_id: str, channel_id: str) -> bool:
     conn = database.get_db_connection()
     try:
         cursor = conn.cursor()
-        now = datetime.now(timezone.utc).isoformat()
+        now = _get_utc_timestamp()
         
         try:
             cursor.execute(
@@ -843,7 +848,7 @@ def log_honeypot_violation(guild_id: str, user_id: str, channel_id: str) -> None
     conn = database.get_db_connection()
     try:
         cursor = conn.cursor()
-        now = datetime.now(timezone.utc).isoformat()
+        now = _get_utc_timestamp()
         
         # Insert violation record
         cursor.execute(

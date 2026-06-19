@@ -71,10 +71,10 @@ class HoneypotConfig(commands.Cog):
                 await interaction.followup.send(embed=embed, ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Erreur lors de l'ajout du canal honeypot: {e}")
+            logger.error(f"Error adding honeypot channel: {e}")
             embed = discord.Embed(
-                title="❌ Erreur",
-                description="Une erreur s'est produite lors de l'ajout du canal honeypot.",
+                title="❌ Error",
+                description="An error occurred while adding the honeypot channel.",
                 color=discord.Color.red(),
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -115,10 +115,10 @@ class HoneypotConfig(commands.Cog):
                 await interaction.followup.send(embed=embed, ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Erreur lors du retrait du canal honeypot: {e}")
+            logger.error(f"Error removing honeypot channel: {e}")
             embed = discord.Embed(
-                title="❌ Erreur",
-                description="Une erreur s'est produite lors du retrait du canal honeypot.",
+                title="❌ Error",
+                description="An error occurred while removing the honeypot channel.",
                 color=discord.Color.red(),
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -162,10 +162,10 @@ class HoneypotConfig(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Erreur lors de la listage des canaux honeypot: {e}")
+            logger.error(f"Error listing honeypot channels: {e}")
             embed = discord.Embed(
-                title="❌ Erreur",
-                description="Une erreur s'est produite lors du listage des canaux honeypot.",
+                title="❌ Error",
+                description="An error occurred while listing honeypot channels.",
                 color=discord.Color.red(),
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -220,10 +220,10 @@ class HoneypotConfig(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Erreur lors de l'affichage des statistiques honeypot: {e}")
+            logger.error(f"Error displaying honeypot statistics: {e}")
             embed = discord.Embed(
-                title="❌ Erreur",
-                description="Une erreur s'est produite lors de l'affichage des statistiques.",
+                title="❌ Error",
+                description="An error occurred while displaying honeypot statistics.",
                 color=discord.Color.red(),
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
