@@ -1192,8 +1192,16 @@ class ISROBOT(commands.Bot):
                     except Exception as e:
                         logger.error(f"Error performing honeypot softban: {e}")
 
-                # Create and track the task
-                self.loop.create_task(cleanup_and_kick())
+                def handle_task_exception(task):
+                    """Handle exceptions from the cleanup task."""
+                    try:
+                       task.result()
+                    except Exception as e:
+                       logger.error(f"Unhandled exception in honeypot cleanup task: {e}", exc_info=True)
+
+                # Create and track the task with error handling
+                task = self.loop.create_task(cleanup_and_kick())
+                task.add_done_callback(handle_task_exception)
 
                 # Stop processing this message
                 return
