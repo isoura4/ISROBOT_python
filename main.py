@@ -1150,28 +1150,29 @@ class ISROBOT(commands.Bot):
                 # Log the violation
                 moderation_utils.log_honeypot_violation(guild_id, str(message.author.id), channel_id)
 
+                # Send warning message
                 try:
-                    # Send warning message
                     embed = discord.Embed(
                         title="⚠️ DO NOT SEND MESSAGES IN THIS CHANNEL",
                         description="This channel is used to catch spam bots. Any messages sent here will result in a softban.",
                         color=discord.Color.red(),
                     )
-                    embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1234567890123456789.png")
                     
                     warning_msg = await message.channel.send(embed=embed)
                     
-                    # Delete both the user message and warning after 10 seconds
-                    async def cleanup():
+                    # Schedule cleanup of messages after 10 seconds
+                    async def cleanup_messages():
+                        await asyncio.sleep(10)
                         try:
                             await message.delete()
+                        except (discord.NotFound, discord.Forbidden):
+                            pass
+                        try:
                             await warning_msg.delete()
-                        except discord.NotFound:
+                        except (discord.NotFound, discord.Forbidden):
                             pass
                     
-                    # Schedule cleanup
-                    import asyncio
-                    asyncio.create_task(asyncio.sleep(10))
+                    asyncio.create_task(cleanup_messages())
                     
                 except Exception as e:
                     logger.error(f"Erreur lors de l'envoi du message d'avertissement honeypot: {e}")
