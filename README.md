@@ -212,9 +212,13 @@ All minigame commands must be run in the designated minigame channel (set by an 
 - `/minigame stats` - View minigame configuration and statistics
 - `/stream_add <streamer_name> <channel>` - Add a streamer to the notification list
 - `/stream_remove <streamer_name>` - Remove a streamer from the notification list
+- `/stream_list` - List configured streamers and their status
 - `/youtube_add <channel_id_or_handle> <channel> [notify_videos] [notify_shorts] [ping_role]` - Add a YouTube channel to monitor (accepts channel ID or @handle)
 - `/youtube_remove <channel_name>` - Remove a YouTube channel from monitoring
 - `/reload` - Reload all bot extensions
+- `/feature_list` - Show enabled/disabled bot features from `.env`
+- `/feature_enable <feature>` - Enable a feature and update `.env`
+- `/feature_disable <feature>` - Disable a feature and update `.env`
 
 ### Moderation Commands (Moderator+)
 - `/warn <user> <reason>` - Issue a warning to a user
