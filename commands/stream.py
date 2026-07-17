@@ -175,6 +175,64 @@ class Stream(commands.Cog):
                 f"❌ Erreur lors de la suppression du streamer: {str(e)}", ephemeral=True
             )
 
+    @app_commands.command(
+        name="stream_list",
+        description="Afficher la liste des streamers actuellement suivis.",
+    )
+    @app_commands.guilds(discord.Object(id=SERVER_ID))
+    @app_commands.default_permissions(administrator=True)
+    async def stream_list(self, interaction: discord.Interaction):
+        try:
+            conn = database.get_db_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT streamerName, streamChannelId, roleId, announced
+                    FROM streamers
+                    ORDER BY streamerName ASC
+                    """
+                )
+                rows = cursor.fetchall()
+            finally:
+                conn.close()
+
+            if not rows:
+                await interaction.response.send_message(
+                    "ℹ️ Aucun streamer n'est actuellement configuré.",
+                    ephemeral=True,
+                )
+                return
+
+            embed = discord.Embed(
+                title="📺 Streamers suivis",
+                color=discord.Color.purple(),
+            )
+
+            for streamer_name, channel_id, role_id, announced in rows:
+                channel_mention = (
+                    f"<#{channel_id}>" if channel_id else "Canal non défini"
+                )
+                role_mention = f"<@&{role_id}>" if role_id else "Aucun rôle"
+                live_status = "🔴 En ligne" if announced else "⚪ Hors ligne"
+                embed.add_field(
+                    name=streamer_name,
+                    value=(
+                        f"Salon: {channel_mention}\n"
+                        f"Rôle: {role_mention}\n"
+                        f"Statut: {live_status}"
+                    ),
+                    inline=False,
+                )
+
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            logger.error(f"Erreur lors de l'affichage des streamers: {e}")
+            await interaction.response.send_message(
+                f"❌ Erreur lors de la récupération de la liste: {str(e)}",
+                ephemeral=True,
+            )
+
 
 class GetTwitchOAuth:
     """Classe pour gérer l'authentification avec l'API Twitch."""

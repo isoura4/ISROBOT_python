@@ -15,6 +15,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 import database
+from utils.feature_toggles import is_module_enabled, module_label
 
 # ============================================================================
 # GameVox Configuration - Support for running on GameVox platform
@@ -266,6 +267,11 @@ class ISROBOT(commands.Bot):
                 continue
             # Charger le module comme extension
             module_name = f"commands.{file.stem}"
+            if not is_module_enabled(module_name):
+                logger.info(
+                    f"Extension désactivée via .env: {module_label(module_name)}"
+                )
+                continue
             try:
                 await self.load_extension(module_name)
                 logger.debug(f"Extension {module_name} chargée avec succès")
@@ -307,10 +313,12 @@ class ISROBOT(commands.Bot):
             )
 
         # Démarrer la tâche de vérification des streams en arrière-plan
-        self.stream_check_task = self.loop.create_task(self.check_streams_loop())
+        if is_module_enabled("commands.stream"):
+            self.stream_check_task = self.loop.create_task(self.check_streams_loop())
 
         # Démarrer la tâche de vérification YouTube en arrière-plan
-        self.youtube_check_task = self.loop.create_task(self.check_youtube_loop())
+        if is_module_enabled("commands.youtube"):
+            self.youtube_check_task = self.loop.create_task(self.check_youtube_loop())
 
         # Démarrer les tâches de modération en arrière-plan
         self.warning_decay_task = self.loop.create_task(self.warning_decay_loop())
