@@ -21,9 +21,7 @@ class TestEnsureEnvVariables:
         env_example = tmp_path / ".env.example"
         env_file = tmp_path / ".env"
 
-        env_example.write_text(
-            "app_id=123\nsecret_key=TOKEN\nNEW_VAR=default_value\n"
-        )
+        env_example.write_text("app_id=123\nsecret_key=TOKEN\nNEW_VAR=default_value\n")
         env_file.write_text("app_id=999\nsecret_key=MYTOKEN\n")
 
         _run_ensure_env(str(tmp_path))
@@ -64,9 +62,7 @@ class TestEnsureEnvVariables:
         env_example = tmp_path / ".env.example"
         env_file = tmp_path / ".env"
 
-        env_example.write_text(
-            "# This is a comment\n\napp_id=123\n# Another comment\n"
-        )
+        env_example.write_text("# This is a comment\n\napp_id=123\n# Another comment\n")
         env_file.write_text("")
 
         _run_ensure_env(str(tmp_path))

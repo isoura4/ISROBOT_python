@@ -9,11 +9,13 @@ from dotenv import load_dotenv
 
 from utils.feature_toggles import (
     FEATURES,
+    feature_label,
     get_feature_rows,
     is_module_enabled,
     module_label,
     set_feature_enabled,
 )
+from utils.i18n import get_locale, t, tr
 from utils.logging_config import get_logger
 
 # Chargement du fichier .env
@@ -33,25 +35,30 @@ class Reload(commands.Cog):
 
     async def _sync_commands(self) -> bool:
         try:
+            # Synchronisation globale (commandes sans scope de guilde)
+            await self.bot.tree.sync()
+            # Synchronisation sur la guilde (instantanée)
             await self.bot.tree.sync(guild=discord.Object(id=SERVER_ID))
             return True
         except Exception as e:
             logger.error(f"Erreur lors de la synchronisation: {e}")
             return False
 
-    async def _reload_extensions(self) -> Tuple[List[str], List[str], List[str]]:
+    async def _reload_extensions(
+        self, locale: str = None
+    ) -> Tuple[List[str], List[str], List[str]]:
         reloaded_extensions: List[str] = []
         failed_extensions: List[str] = []
         disabled_extensions: List[str] = []
 
-        commands_path = os.path.join(os.getcwd(), "commands")
+        commands_path = Path(__file__).resolve().parents[1] / "commands"
         for file in os.listdir(commands_path):
             if not file.endswith(".py") or file.startswith("_"):
                 continue
 
             module_name = f"commands.{file[:-3]}"
             if not is_module_enabled(module_name):
-                disabled_extensions.append(module_label(module_name))
+                disabled_extensions.append(module_label(module_name, locale))
                 if module_name in self.bot.extensions:
                     try:
                         await self.bot.unload_extension(module_name)
@@ -78,18 +85,21 @@ class Reload(commands.Cog):
         self, interaction: discord.Interaction, current: str
     ) -> List[app_commands.Choice[str]]:
         current_lower = current.lower()
+        locale = get_locale(interaction)
         return [
-            app_commands.Choice(name=f"{key} — {data['label']}", value=key)
-            for key, data in FEATURES.items()
-            if current_lower in key.lower() or current_lower in data["label"].lower()
+            app_commands.Choice(name=f"{key} — {feature_label(key, locale)}", value=key)
+            for key in FEATURES
+            if current_lower in key.lower()
+            or current_lower in feature_label(key, locale).lower()
         ][:25]
 
     async def _apply_feature_toggle(
         self, interaction: discord.Interaction, feature: str, enabled: bool
     ) -> None:
+        locale = get_locale(interaction)
         if feature not in FEATURES:
             await interaction.response.send_message(
-                f"❌ Fonctionnalité inconnue: `{feature}`", ephemeral=True
+                t("reload.unknown_feature", locale, feature=feature), ephemeral=True
             )
             return
 
@@ -107,37 +117,43 @@ class Reload(commands.Cog):
         except Exception as e:
             logger.error(f"Erreur lors de l'application du toggle {feature}: {e}")
             await interaction.response.send_message(
-                f"❌ Impossible d'appliquer le changement pour `{feature}`: {e}",
+                t("reload.apply_failed", locale, feature=feature, error=e),
                 ephemeral=True,
             )
             return
 
         sync_success = await self._sync_commands()
-        state_label = "activée" if enabled else "désactivée"
-        sync_label = (
-            "✅ synchronisées" if sync_success else "⚠️ erreur de synchronisation"
+        state_label = t(
+            "reload.state_enabled" if enabled else "reload.state_disabled", locale
         )
+        sync_label = t("reload.sync_ok" if sync_success else "reload.sync_fail", locale)
         await interaction.response.send_message(
-            f"✅ Fonctionnalité **{FEATURES[feature]['label']}** {state_label}. "
-            f".env mis à jour, commandes {sync_label}.",
+            t(
+                "reload.toggle_success",
+                locale,
+                label=feature_label(feature, locale),
+                state=state_label,
+                sync=sync_label,
+            ),
             ephemeral=True,
         )
 
-    @app_commands.command(name="reload", description="Recharge les commandes du bot.")
+    @app_commands.command(name="reload", description=tr("cmd.reload.desc"))
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.default_permissions(administrator=True)
     async def reload(self, interaction: discord.Interaction):
+        locale = get_locale(interaction)
         # Différer la réponse car le processus peut prendre du temps
         await interaction.response.defer()
 
         reloaded_extensions, failed_extensions, disabled_extensions = (
-            await self._reload_extensions()
+            await self._reload_extensions(locale)
         )
         sync_success = await self._sync_commands()
 
         # Préparer le message de réponse
         embed = discord.Embed(
-            title="Rechargement des commandes",
+            title=t("reload.title", locale),
             color=(
                 discord.Color.green()
                 if not failed_extensions
@@ -147,35 +163,35 @@ class Reload(commands.Cog):
 
         if reloaded_extensions:
             embed.add_field(
-                name="✅ Extensions rechargées",
+                name=t("reload.field_reloaded", locale),
                 value="\n".join([f"• {ext}" for ext in reloaded_extensions]),
                 inline=False,
             )
 
         if disabled_extensions:
             embed.add_field(
-                name="⏸️ Extensions désactivées (.env)",
+                name=t("reload.field_disabled", locale),
                 value="\n".join([f"• {ext}" for ext in disabled_extensions]),
                 inline=False,
             )
 
         if failed_extensions:
             embed.add_field(
-                name="❌ Extensions échouées",
+                name=t("reload.field_failed", locale),
                 value="\n".join([f"• {ext}" for ext in failed_extensions]),
                 inline=False,
             )
 
         if sync_success:
             embed.add_field(
-                name="🔄 Synchronisation",
-                value="Commandes synchronisées avec Discord",
+                name=t("reload.field_sync", locale),
+                value=t("reload.sync_done", locale),
                 inline=False,
             )
         else:
             embed.add_field(
-                name="⚠️ Synchronisation",
-                value="Erreur lors de la synchronisation",
+                name=t("reload.field_sync_warn", locale),
+                value=t("reload.sync_error", locale),
                 inline=False,
             )
 
@@ -183,19 +199,23 @@ class Reload(commands.Cog):
 
     @app_commands.command(
         name="feature_list",
-        description="Voir les fonctionnalités activées/désactivées via .env.",
+        description=tr("cmd.feature_list.desc"),
     )
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.default_permissions(administrator=True)
     async def feature_list(self, interaction: discord.Interaction):
-        rows = get_feature_rows()
+        locale = get_locale(interaction)
+        rows = get_feature_rows(locale)
 
         embed = discord.Embed(
-            title="Fonctionnalités du bot",
+            title=t("reload.features_title", locale),
             color=discord.Color.blurple(),
         )
         for key, label, enabled, env_key in rows:
-            status = "✅ Activée" if enabled else "❌ Désactivée"
+            status = t(
+                "reload.feature_status_on" if enabled else "reload.feature_status_off",
+                locale,
+            )
             embed.add_field(
                 name=f"{label} ({key})",
                 value=f"{status}\n`{env_key}`",
@@ -206,7 +226,7 @@ class Reload(commands.Cog):
 
     @app_commands.command(
         name="feature_enable",
-        description="Activer une fonctionnalité et mettre à jour le .env.",
+        description=tr("cmd.feature_enable.desc"),
     )
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.default_permissions(administrator=True)
@@ -216,7 +236,7 @@ class Reload(commands.Cog):
 
     @app_commands.command(
         name="feature_disable",
-        description="Désactiver une fonctionnalité et mettre à jour le .env.",
+        description=tr("cmd.feature_disable.desc"),
     )
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.default_permissions(administrator=True)

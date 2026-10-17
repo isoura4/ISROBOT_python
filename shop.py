@@ -9,7 +9,8 @@ This module handles:
 """
 
 import json
-from datetime import datetime, timedelta
+import logging
+from datetime import timedelta
 from typing import Optional
 
 from database import get_db_connection
@@ -18,6 +19,9 @@ from db_helpers import (
     spend_coins,
     spend_xp,
 )
+from utils.time_utils import utcnow
+
+logger = logging.getLogger(__name__)
 
 
 def get_shop_items(
@@ -32,13 +36,11 @@ def get_shop_items(
     cursor = conn.cursor()
     try:
         if active_only:
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT * FROM shop_items
                 WHERE active = 1 AND (stock = -1 OR stock > 0)
                 ORDER BY price_coins, price_xp
-                """
-            )
+                """)
         else:
             cursor.execute("SELECT * FROM shop_items ORDER BY price_coins, price_xp")
 
@@ -50,6 +52,10 @@ def get_shop_items(
                 try:
                     item["metadata"] = json.loads(item["metadata"])
                 except json.JSONDecodeError:
+                    logger.warning(
+                        "Métadonnées JSON invalides pour l'objet boutique %s",
+                        item.get("id"),
+                    )
                     item["metadata"] = {}
             items.append(item)
 
@@ -78,6 +84,10 @@ def get_shop_item(item_id: int, conn=None) -> Optional[dict]:
             try:
                 item["metadata"] = json.loads(item["metadata"])
             except json.JSONDecodeError:
+                logger.warning(
+                    "Métadonnées JSON invalides pour l'objet boutique %s",
+                    item.get("id"),
+                )
                 item["metadata"] = {}
 
         return item
@@ -122,12 +132,6 @@ def buy_item(
         if not item["active"]:
             raise ValueError("Item is not available for purchase")
 
-        # Check stock
-        if item["stock"] != -1 and item["stock"] < quantity:
-            raise ValueError(
-                f"Not enough stock: only {item['stock']} available"
-            )
-
         # Calculate total cost
         total_coins = item["price_coins"] * quantity
         total_xp = item["price_xp"] * quantity
@@ -142,9 +146,19 @@ def buy_item(
             )
 
         if total_xp > 0 and balance["xp"] < total_xp:
-            raise ValueError(
-                f"Not enough XP: have {balance['xp']}, need {total_xp}"
+            raise ValueError(f"Not enough XP: have {balance['xp']}, need {total_xp}")
+
+        # Reserve stock atomically before charging (stock = -1 means unlimited)
+        if item["stock"] != -1:
+            result = cursor.execute(
+                "UPDATE shop_items SET stock = stock - ? "
+                "WHERE id = ? AND stock >= ?",
+                (quantity, item_id, quantity),
             )
+            if result.rowcount == 0:
+                raise ValueError(
+                    f"Not enough stock: only {max(item['stock'], 0)} available"
+                )
 
         # Deduct costs
         if total_coins > 0:
@@ -168,13 +182,6 @@ def buy_item(
                 related_id=item_id,
                 related_type="shop_item",
                 conn=conn,
-            )
-
-        # Update stock if limited
-        if item["stock"] != -1:
-            cursor.execute(
-                "UPDATE shop_items SET stock = stock - ? WHERE id = ?",
-                (quantity, item_id),
             )
 
         # Add to inventory if consumable
@@ -239,6 +246,10 @@ def get_user_inventory(
                 try:
                     item["metadata"] = json.loads(item["metadata"])
                 except json.JSONDecodeError:
+                    logger.warning(
+                        "Métadonnées JSON invalides pour l'inventaire (objet %s)",
+                        item.get("item_id", item.get("id")),
+                    )
                     item["metadata"] = {}
             items.append(item)
 
@@ -292,23 +303,28 @@ def use_item(
             try:
                 metadata = json.loads(row[2])
             except json.JSONDecodeError:
-                pass
+                logger.warning(
+                    "Métadonnées JSON invalides pour l'objet utilisé (objet %s)",
+                    item_id,
+                )
 
-        # Decrement quantity
-        cursor.execute(
+        # Decrement quantity atomically (guards against double-use races)
+        result = cursor.execute(
             """
             UPDATE user_inventory
             SET quantity = quantity - 1
-            WHERE guildId = ? AND userId = ? AND itemId = ?
+            WHERE guildId = ? AND userId = ? AND itemId = ? AND quantity > 0
             """,
             (str(guild_id), str(user_id), item_id),
         )
+        if result.rowcount == 0:
+            raise ValueError("You don't have this item in your inventory")
 
         # Store active effect
         effect = metadata.get("effect")
         if effect:
             duration = metadata.get("duration_minutes", 60)
-            expires_at = datetime.utcnow() + timedelta(minutes=duration)
+            expires_at = utcnow() + timedelta(minutes=duration)
 
             cursor.execute(
                 """
@@ -357,7 +373,7 @@ def get_active_effects(
 
     cursor = conn.cursor()
     try:
-        now = datetime.utcnow().isoformat()
+        now = utcnow().isoformat()
 
         cursor.execute(
             """

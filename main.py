@@ -1,12 +1,12 @@
 # Importation des bibliothèques et modules
 import asyncio
-from datetime import datetime, timedelta, timezone
 import logging
 import os
-from pathlib import Path
 import signal
 import sqlite3
 import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import aiohttp
 import discord
@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 import database
 from utils.feature_toggles import is_module_enabled, module_label
+from utils.i18n import JsonTranslator, t
 
 # ============================================================================
 # GameVox Configuration - Support for running on GameVox platform
@@ -75,7 +76,7 @@ ensure_env_variables()
 load_dotenv()
 
 # Configure logging using the new logging system
-from utils.logging_config import setup_logging, get_logger
+from utils.logging_config import get_logger, setup_logging
 
 # Setup logging with rotation and configurable levels
 setup_logging()
@@ -90,30 +91,34 @@ def validate_environment_variables():
     """Valide que toutes les variables d'environnement requises sont définies."""
     # Determine platform
     platform = os.getenv("PLATFORM", "discord").lower()
-    
+
     # Common required variables for both platforms
     required_vars = {
         "db_path": "Le chemin de la base de données est requis",
     }
-    
+
     # Platform-specific required variables
     if platform == "gamevox":
-        required_vars.update({
-            "app_id": "L'ID de l'application GameVox est requis",
-            "gamevox_bot_token": "Le token du bot GameVox est requis",
-            "server_id": "L'ID du serveur GameVox est requis",
-        })
+        required_vars.update(
+            {
+                "app_id": "L'ID de l'application GameVox est requis",
+                "gamevox_bot_token": "Le token du bot GameVox est requis",
+                "server_id": "L'ID du serveur GameVox est requis",
+            }
+        )
     else:
         # Discord is the default
-        required_vars.update({
-            "app_id": "L'ID de l'application Discord est requis",
-            "secret_key": "Le token du bot Discord est requis",
-            "server_id": "L'ID du serveur Discord est requis",
-        })
-    
+        required_vars.update(
+            {
+                "app_id": "L'ID de l'application Discord est requis",
+                "secret_key": "Le token du bot Discord est requis",
+                "server_id": "L'ID du serveur Discord est requis",
+            }
+        )
+
     missing_vars = []
     invalid_vars = []
-    
+
     for var_name, error_msg in required_vars.items():
         value = os.getenv(var_name)
         if not value:
@@ -126,7 +131,7 @@ def validate_environment_variables():
                     invalid_vars.append(f"  - {var_name}: Doit être un nombre positif")
             except ValueError:
                 invalid_vars.append(f"  - {var_name}: Doit être un nombre valide")
-    
+
     if missing_vars or invalid_vars:
         error_message = "❌ Erreur de configuration:\n"
         if missing_vars:
@@ -148,7 +153,6 @@ except ValueError as e:
 APP_ID = int(os.getenv("app_id", "0"))
 TOKEN = os.getenv("secret_key")
 SERVER_ID = int(os.getenv("server_id", "0"))
-DB_PATH = os.getenv("db_path")
 
 # ============================================================================
 # Platform Configuration (Discord or GameVox)
@@ -173,15 +177,15 @@ GAMEVOX_BOT_TOKEN = os.getenv("gamevox_bot_token")
 # Configure discord.py for GameVox if PLATFORM is set to gamevox
 if PLATFORM == "gamevox":
     logger.info("🎮 Configuring bot for GameVox platform")
-    
+
     # Set the REST API base URL to GameVox
     discord.http.Route.BASE = f"{GAMEVOX_API_BASE}/api/{API_VERSION}"
-    
+
     # Set the Gateway WebSocket URL to GameVox
     discord.gateway.DiscordWebSocket.DEFAULT_GATEWAY = (
         f"{GAMEVOX_GATEWAY_BASE}/?v={API_VERSION_NUM}&encoding=json"
     )
-    
+
     # Use GameVox token (validation already done in validate_environment_variables)
     # Note: TOKEN is used throughout the rest of the file to pass to client.run()
     TOKEN = GAMEVOX_BOT_TOKEN
@@ -225,6 +229,12 @@ class ISROBOT(commands.Bot):
         """
         key = (guild_id, channel_id)
         if key not in self._counter_locks:
+            # Bornage mémoire : purge les locks inutilisés quand le dict devient
+            # trop grand (les locks verrouillés sont conservés tant qu'ils servent).
+            if len(self._counter_locks) > 256:
+                self._counter_locks = {
+                    k: lock for k, lock in self._counter_locks.items() if lock.locked()
+                }
             self._counter_locks[key] = asyncio.Lock()
         return self._counter_locks[key]
 
@@ -232,9 +242,12 @@ class ISROBOT(commands.Bot):
         # Créer une session HTTP pour les requêtes API avec timeout
         timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=15)
         self.session = aiohttp.ClientSession(timeout=timeout)
-        
+
         # Configure global error handler for app commands
         self.tree.on_error = self.on_app_command_error
+
+        # Active la traduction native des commandes (fr/en)
+        await self.tree.set_translator(JsonTranslator())
 
         # Lancer le script database.py pour créer la base de données
         logger.info("Initialisation de la base de données...")
@@ -261,7 +274,7 @@ class ISROBOT(commands.Bot):
         logger.debug("Commandes existantes vidées")
 
         # Parcourir les fichiers contenant des commandes
-        commands_path = Path("commands/")
+        commands_path = Path(_SCRIPT_DIR) / "commands"
         for file in commands_path.glob("*.py"):
             if file.name.startswith("_"):
                 continue
@@ -286,7 +299,9 @@ class ISROBOT(commands.Bot):
 
             # Synchronisation sur le serveur spécifique (instantané)
             synced_guild = await self.tree.sync(guild=discord.Object(id=SERVER_ID))
-            logger.info(f"{len(synced_guild)} commande(s) synchronisée(s) avec le serveur")
+            logger.info(
+                f"{len(synced_guild)} commande(s) synchronisée(s) avec le serveur"
+            )
 
         except Exception as e:
             logger.error(f"Erreur lors de la synchronisation: {e}", exc_info=True)
@@ -309,7 +324,7 @@ class ISROBOT(commands.Bot):
         except Exception as e:
             logger.error(
                 f"Erreur lors de la vérification du minijeux du compteur: {e}",
-                exc_info=True
+                exc_info=True,
             )
 
         # Démarrer la tâche de vérification des streams en arrière-plan
@@ -320,15 +335,21 @@ class ISROBOT(commands.Bot):
         if is_module_enabled("commands.youtube"):
             self.youtube_check_task = self.loop.create_task(self.check_youtube_loop())
 
+        # Démarrer la tâche de vérification Bluesky en arrière-plan
+        if is_module_enabled("commands.bluesky"):
+            self.bluesky_check_task = self.loop.create_task(self.check_bluesky_loop())
+
         # Démarrer les tâches de modération en arrière-plan
         self.warning_decay_task = self.loop.create_task(self.warning_decay_loop())
         self.mute_expiration_task = self.loop.create_task(self.mute_expiration_loop())
-        
+
         # Démarrer la tâche de sauvegarde automatique
         self.backup_task = self.loop.create_task(self.scheduled_backup_loop())
-        
+
         # Démarrer la tâche de nettoyage du rate limiter
-        self.rate_limit_cleanup_task = self.loop.create_task(self.rate_limit_cleanup_loop())
+        self.rate_limit_cleanup_task = self.loop.create_task(
+            self.rate_limit_cleanup_loop()
+        )
 
     async def check_streams_loop(self):
         """Vérifier périodiquement le statut des streamers."""
@@ -351,7 +372,9 @@ class ISROBOT(commands.Bot):
                     finally:
                         conn.close()
 
-                    logger.debug(f"[Twitch] Vérification de {len(streamers)} streamer(s)")
+                    logger.debug(
+                        f"[Twitch] Vérification de {len(streamers)} streamer(s)"
+                    )
 
                     for streamer in streamers:
                         try:
@@ -454,11 +477,15 @@ class ISROBOT(commands.Bot):
                             )
 
             except asyncio.TimeoutError:
-                logger.warning("Timeout global lors de la vérification des streams Twitch")
+                logger.warning(
+                    "Timeout global lors de la vérification des streams Twitch"
+                )
             except aiohttp.ClientError as e:
                 logger.error(f"Erreur réseau lors de la vérification des streams: {e}")
             except sqlite3.Error as e:
-                logger.error(f"Erreur de base de données lors de la vérification des streams: {e}")
+                logger.error(
+                    f"Erreur de base de données lors de la vérification des streams: {e}"
+                )
             except Exception as e:
                 logger.error(f"Erreur lors de la vérification des streams: {e}")
 
@@ -481,7 +508,9 @@ class ISROBOT(commands.Bot):
             # Parse the ISO 8601 timestamp from YouTube API
             # YouTube API always returns timestamps in format: YYYY-MM-DDTHH:MM:SSZ
             # The 'Z' suffix indicates UTC timezone and is replaced with '+00:00' for Python's fromisoformat()
-            published_at = datetime.fromisoformat(published_at_str.replace('Z', '+00:00'))
+            published_at = datetime.fromisoformat(
+                published_at_str.replace("Z", "+00:00")
+            )
             now = datetime.now(timezone.utc)
             time_diff = now - published_at
 
@@ -584,6 +613,18 @@ class ISROBOT(commands.Bot):
                                         )
                                     )
 
+                                    # Récupérer les détails en un seul appel API (évite le N+1)
+                                    if latest_uploads:
+                                        upload_ids = [
+                                            u["snippet"]["resourceId"]["videoId"]
+                                            for u in latest_uploads
+                                        ]
+                                        details_map = await youtube_checker.get_video_details_batch(
+                                            upload_ids
+                                        )
+                                    else:
+                                        details_map = {}
+
                                     # Track the newest content to announce (only one of each type per cycle)
                                     newest_video_to_announce = None
                                     newest_short_to_announce = None
@@ -614,14 +655,18 @@ class ISROBOT(commands.Bot):
                                         ]
 
                                         # Get the published date from the upload snippet
-                                        published_at = upload["snippet"].get("publishedAt", "")
+                                        published_at = upload["snippet"].get(
+                                            "publishedAt", ""
+                                        )
 
                                         # Check if the content was published recently (within 24 hours)
                                         # Note: We rely on YouTube API returning items in reverse chronological order
                                         # (newest first). Since the API returns both videos and shorts mixed together
                                         # in the uploads playlist, if an item is older than 24h, ALL subsequent items
                                         # will also be older (regardless of type), so we can safely break.
-                                        if not self._is_recently_published(published_at, hours=24):
+                                        if not self._is_recently_published(
+                                            published_at, hours=24
+                                        ):
                                             logger.debug(
                                                 f"[YouTube] Contenu ignoré car trop ancien pour "
                                                 f"{channel_name}: {video_id} (date: {published_at})"
@@ -629,12 +674,8 @@ class ISROBOT(commands.Bot):
                                             # Stop checking: all subsequent items will be older than this one
                                             break
 
-                                        # Récupérer les détails de la vidéo pour déterminer si c'est un short
-                                        video_details = (
-                                            await youtube_checker.get_video_details(
-                                                video_id
-                                            )
-                                        )
+                                        # Détails déjà récupérés en lot (évite le N+1)
+                                        video_details = details_map.get(video_id)
                                         if not video_details:
                                             logger.warning(
                                                 f"[YouTube] Impossible de récupérer les détails "
@@ -869,7 +910,9 @@ class ISROBOT(commands.Bot):
             except aiohttp.ClientError as e:
                 logger.error(f"Erreur réseau lors de la vérification YouTube: {e}")
             except sqlite3.Error as e:
-                logger.error(f"Erreur de base de données lors de la vérification YouTube: {e}")
+                logger.error(
+                    f"Erreur de base de données lors de la vérification YouTube: {e}"
+                )
             except Exception as e:
                 error_msg = str(e)
                 # Détecter les erreurs de quota
@@ -887,10 +930,132 @@ class ISROBOT(commands.Bot):
             # En cas de dépassement de quota, la boucle continue mais les erreurs sont loggées
             await asyncio.sleep(600)
 
+    async def check_bluesky_loop(self):
+        """Vérifier périodiquement les nouveaux posts Bluesky."""
+        await self.wait_until_ready()
+        logger.info("Démarrage de la boucle de vérification Bluesky")
+
+        while not self.is_closed():
+            try:
+                from commands.bluesky import (
+                    MAX_ANNOUNCE_PER_CYCLE,
+                    AnnounceBluesky,
+                    CheckBlueskyAccount,
+                    _db_list_bluesky_accounts,
+                    _db_update_last_post,
+                    announce_posts_with_checkpoint,
+                    select_new_posts,
+                )
+
+                if self.session:
+                    accounts = await asyncio.to_thread(_db_list_bluesky_accounts)
+                    logger.debug(f"[Bluesky] Vérification de {len(accounts)} compte(s)")
+
+                    checker = CheckBlueskyAccount(self.session)
+                    announcer = AnnounceBluesky(self)
+
+                    for account in accounts:
+                        try:
+                            account_id = account[0]
+                            handle = account[1]
+                            did = account[2] or handle
+                            display_name = account[3]
+                            discord_channel_id = int(account[4])
+                            last_post_uri = account[6]
+
+                            discord_channel = self.get_channel(discord_channel_id)
+                            if not discord_channel or not isinstance(
+                                discord_channel, discord.TextChannel
+                            ):
+                                logger.warning(
+                                    f"Canal Discord introuvable ou invalide pour "
+                                    f"{handle}: {discord_channel_id}"
+                                )
+                                continue
+
+                            if discord_channel.guild and discord_channel.guild.me:
+                                permissions = discord_channel.permissions_for(
+                                    discord_channel.guild.me
+                                )
+                                if not permissions.send_messages:
+                                    logger.warning(
+                                        f"Permission manquante pour envoyer des "
+                                        f"messages dans {discord_channel.name} "
+                                        f"(Bluesky: {handle})"
+                                    )
+                                    continue
+
+                            feed = await checker.get_author_feed(did, limit=20)
+                            if not feed:
+                                continue
+
+                            newest_post = feed[0].get("post", {})
+                            newest_uri = newest_post.get("uri")
+
+                            # Premier cycle : initialiser sans annoncer l'ancien contenu
+                            if not last_post_uri:
+                                await asyncio.to_thread(
+                                    _db_update_last_post,
+                                    account_id,
+                                    newest_uri,
+                                    newest_post.get("cid"),
+                                )
+                                continue
+
+                            # Collecter les nouveaux posts (le flux est du plus récent au plus ancien)
+                            new_posts = select_new_posts(feed, last_post_uri)
+
+                            # Limiter le nombre d'annonces par cycle (anti-spam si le
+                            # dernier post connu a disparu du flux) : on annonce les
+                            # plus récents puis on avance le marqueur.
+                            new_posts = new_posts[-MAX_ANNOUNCE_PER_CYCLE:]
+
+                            # Annoncer dans l'ordre chronologique. Le marqueur
+                            # n'avance qu'après chaque envoi réussi : un post non
+                            # envoyé est réessayé au cycle suivant (sans doublon).
+                            await announce_posts_with_checkpoint(
+                                announcer,
+                                account_id,
+                                handle,
+                                display_name,
+                                discord_channel,
+                                new_posts,
+                            )
+
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                f"Timeout lors de la vérification Bluesky de "
+                                f"{account[1]}"
+                            )
+                        except aiohttp.ClientError as e:
+                            logger.error(
+                                f"Erreur réseau lors de la vérification Bluesky de "
+                                f"{account[1]}: {e}"
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Erreur lors de la vérification Bluesky de "
+                                f"{account[1]}: {e}"
+                            )
+
+            except asyncio.TimeoutError:
+                logger.warning("Timeout global lors de la vérification Bluesky")
+            except aiohttp.ClientError as e:
+                logger.error(f"Erreur réseau lors de la vérification Bluesky: {e}")
+            except sqlite3.Error as e:
+                logger.error(
+                    f"Erreur de base de données lors de la vérification Bluesky: {e}"
+                )
+            except Exception as e:
+                logger.error(f"[Bluesky] Erreur lors de la vérification: {e}")
+
+            # Attendre 5 minutes avant la prochaine vérification
+            await asyncio.sleep(300)
+
     async def warning_decay_loop(self):
         """
         Vérifier périodiquement et faire expirer les avertissements.
-        
+
         Note: There's a theoretical race condition if a moderator manually
         decrements warnings while this loop is running. However, this is
         acceptable because:
@@ -909,7 +1074,9 @@ class ISROBOT(commands.Bot):
                 # Get users whose warnings should decay
                 users_to_decay = moderation_utils.get_users_for_decay()
 
-                logger.debug(f"[Modération] Vérification de {len(users_to_decay)} utilisateurs pour expiration")
+                logger.debug(
+                    f"[Modération] Vérification de {len(users_to_decay)} utilisateurs pour expiration"
+                )
 
                 for user_data in users_to_decay:
                     try:
@@ -922,37 +1089,57 @@ class ISROBOT(commands.Bot):
                             guild_id, user_id, None, "Expiration automatique"
                         )
 
-                        logger.info(f"[Modération] Avertissement expiré: {user_id} @ {guild_id} ({warn_count} -> {new_count})")
+                        logger.info(
+                            f"[Modération] Avertissement expiré: {user_id} @ {guild_id} ({warn_count} -> {new_count})"
+                        )
 
-                        # If warnings reach 0, remove active mute
+                        # If warnings reach 0, remove the automatic mute (if any).
+                        # Manual mutes are left untouched.
                         if new_count == 0:
-                            active_mute = moderation_utils.get_active_mute(guild_id, user_id)
-                            if active_mute:
+                            active_mute = moderation_utils.get_active_mute(
+                                guild_id, user_id
+                            )
+                            if active_mute and active_mute.get("is_auto"):
                                 guild = self.get_guild(int(guild_id))
                                 if guild:
                                     member = guild.get_member(int(user_id))
                                     if member:
                                         try:
-                                            await member.timeout(None, reason="Avertissements expirés")
-                                            moderation_utils.remove_mute(
-                                                guild_id, user_id, None, "Avertissements expirés"
+                                            await member.timeout(
+                                                None, reason="Avertissements expirés"
                                             )
-                                            logger.info(f"Mute retiré pour {user_id} @ {guild_id}")
+                                            moderation_utils.remove_mute(
+                                                guild_id,
+                                                user_id,
+                                                None,
+                                                "Avertissements expirés",
+                                            )
+                                            logger.info(
+                                                f"Mute retiré pour {user_id} @ {guild_id}"
+                                            )
                                         except Exception as e:
-                                            logger.error(f"Erreur lors du retrait du timeout: {e}")
+                                            logger.error(
+                                                f"Erreur lors du retrait du timeout: {e}"
+                                            )
 
                         # Send DM notification
                         guild = self.get_guild(int(guild_id))
                         if guild:
                             member = guild.get_member(int(user_id))
                             if member:
-                                embed = moderation_utils.create_decay_embed(new_count, guild.name)
-                                await moderation_utils.send_dm_notification(member, embed)
+                                embed = moderation_utils.create_decay_embed(
+                                    new_count, guild.name
+                                )
+                                await moderation_utils.send_dm_notification(
+                                    member, embed
+                                )
 
                             # Post to modlog
                             config = moderation_utils.get_moderation_config(guild_id)
                             if config and config.get("log_channel_id"):
-                                channel = guild.get_channel(int(config["log_channel_id"]))
+                                channel = guild.get_channel(
+                                    int(config["log_channel_id"])
+                                )
                                 if channel and isinstance(channel, discord.TextChannel):
                                     log_embed = moderation_utils.create_modlog_embed(
                                         "decay",
@@ -964,10 +1151,14 @@ class ISROBOT(commands.Bot):
                                     await channel.send(embed=log_embed)
 
                     except Exception as e:
-                        logger.error(f"Erreur lors de l'expiration pour {user_data}: {e}")
+                        logger.error(
+                            f"Erreur lors de l'expiration pour {user_data}: {e}"
+                        )
 
             except Exception as e:
-                logger.error(f"Erreur lors de la vérification d'expiration des avertissements: {e}")
+                logger.error(
+                    f"Erreur lors de la vérification d'expiration des avertissements: {e}"
+                )
 
             # Attendre 6 heures avant la prochaine vérification
             await asyncio.sleep(21600)
@@ -985,7 +1176,9 @@ class ISROBOT(commands.Bot):
                 expired_mutes = moderation_utils.get_expired_mutes()
 
                 if expired_mutes:
-                    logger.debug(f"[Modération] Traitement de {len(expired_mutes)} mutes expirés")
+                    logger.debug(
+                        f"[Modération] Traitement de {len(expired_mutes)} mutes expirés"
+                    )
 
                 for mute in expired_mutes:
                     try:
@@ -999,31 +1192,39 @@ class ISROBOT(commands.Bot):
                         member = guild.get_member(int(user_id))
                         if not member:
                             # User left the server, just remove from database
-                            moderation_utils.remove_mute(guild_id, user_id, None, "Utilisateur absent")
+                            moderation_utils.remove_mute(
+                                guild_id, user_id, None, "Utilisateur absent"
+                            )
                             continue
 
                         # Remove timeout
                         try:
                             await member.timeout(None, reason="Mute expiré")
-                            logger.info(f"[Modération] Mute expiré: {user_id} @ {guild_id}")
+                            logger.info(
+                                f"[Modération] Mute expiré: {user_id} @ {guild_id}"
+                            )
                         except Exception as e:
-                            logger.error(f"[Modération] Erreur lors du retrait du timeout: {e}")
+                            logger.error(
+                                f"[Modération] Erreur lors du retrait du timeout: {e}"
+                            )
 
                         # Remove from database
                         moderation_utils.remove_mute(guild_id, user_id, None, "Expiré")
 
                         # Send DM notification
                         embed = discord.Embed(
-                            title="🔊 Mute expiré",
-                            description=f"Votre mute sur **{guild.name}** a expiré.",
+                            title=t("mod.dm.expired_title", None),
+                            description=t(
+                                "mod.dm.expired_desc", None, guild=guild.name
+                            ),
                             color=discord.Color.green(),
                         )
                         embed.add_field(
-                            name="Rappel",
-                            value="N'oubliez pas de respecter les règles du serveur.",
-                            inline=False
+                            name=t("mod.dm.expired_field", None),
+                            value=t("mod.dm.expired_value", None),
+                            inline=False,
                         )
-                        embed.set_footer(text="Système de modération ISROBOT")
+                        embed.set_footer(text=t("mod.footer", None))
                         await moderation_utils.send_dm_notification(member, embed)
 
                         # Post to modlog
@@ -1040,10 +1241,14 @@ class ISROBOT(commands.Bot):
                                 await channel.send(embed=log_embed)
 
                     except Exception as e:
-                        logger.error(f"Erreur lors de l'expiration du mute pour {mute}: {e}")
+                        logger.error(
+                            f"Erreur lors de l'expiration du mute pour {mute}: {e}"
+                        )
 
             except Exception as e:
-                logger.error(f"Erreur lors de la vérification d'expiration des mutes: {e}")
+                logger.error(
+                    f"Erreur lors de la vérification d'expiration des mutes: {e}"
+                )
 
             # Attendre 1 minute avant la prochaine vérification
             await asyncio.sleep(60)
@@ -1055,8 +1260,8 @@ class ISROBOT(commands.Bot):
 
         while not self.is_closed():
             try:
-                from utils.backup import scheduled_backup, auto_recover_database
-                
+                from utils.backup import auto_recover_database, scheduled_backup
+
                 # Check database integrity first
                 is_healthy = auto_recover_database()
                 if not is_healthy:
@@ -1065,14 +1270,16 @@ class ISROBOT(commands.Bot):
                         "Le bot continue de fonctionner mais certaines fonctionnalités peuvent échouer. "
                         "Intervention manuelle requise."
                     )
-                
+
                 # Create scheduled backup
                 backup_path = await scheduled_backup()
                 if backup_path:
-                    logger.info(f"[Backup] Sauvegarde automatique créée: {backup_path.name}")
+                    logger.info(
+                        f"[Backup] Sauvegarde automatique créée: {backup_path.name}"
+                    )
                 else:
                     logger.warning("[Backup] La sauvegarde automatique a échoué")
-                    
+
             except Exception as e:
                 logger.error(f"Erreur lors de la sauvegarde automatique: {e}")
 
@@ -1087,9 +1294,10 @@ class ISROBOT(commands.Bot):
         while not self.is_closed():
             try:
                 from utils.security import rate_limiter
+
                 rate_limiter.cleanup()
                 logger.debug("Nettoyage du rate limiter effectué")
-                
+
             except Exception as e:
                 logger.error(f"Erreur lors du nettoyage du rate limiter: {e}")
 
@@ -1097,27 +1305,25 @@ class ISROBOT(commands.Bot):
             await asyncio.sleep(600)
 
     async def on_app_command_error(
-        self, 
-        interaction: discord.Interaction, 
-        error: app_commands.AppCommandError
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ):
         """Global error handler for app commands (slash commands)."""
-        from utils.error_handlers import handle_interaction_error, classify_error
-        
+        from utils.error_handlers import classify_error, handle_interaction_error
+
         # Unwrap the error if it's wrapped
         original_error = error
-        if hasattr(error, 'original'):
+        if hasattr(error, "original"):
             original_error = error.original
-        
+
         # Log the error
         error_key, _ = classify_error(original_error)
         command_name = interaction.command.name if interaction.command else "unknown"
-        
+
         logger.error(
             f"App command error in /{command_name}: [{error_key}] {original_error}",
-            exc_info=original_error if error_key == "unknown_error" else None
+            exc_info=original_error if error_key == "unknown_error" else None,
         )
-        
+
         # Handle the error and send user-friendly message
         await handle_interaction_error(interaction, original_error)
 
@@ -1127,14 +1333,14 @@ class ISROBOT(commands.Bot):
         """Réinitialiser le compteur du minijeu après une erreur."""
         await message.add_reaction("❌")
         await message.channel.send(error_message)
-        await message.channel.send("On recommence à zéro !")
+        await message.channel.send(t("count.reset", None))
         # Réinitialiser le compteur
         cursor.execute(
             "UPDATE counter_game SET count = 0, lastUserId = NULL WHERE guildId = ?",
             (str(message.guild.id),),
         )
         conn.commit()
-        await message.channel.send("Le compteur a été réinitialisé.")
+        await message.channel.send(t("count.reset_done", None))
         conn.close()
 
     async def on_message(self, message: discord.Message):
@@ -1146,6 +1352,27 @@ class ISROBOT(commands.Bot):
         if not message.guild:
             return
 
+        # --- QUÊTES : progression "messages_sent" ---
+        try:
+            from db_helpers import is_quest_exception_channel
+            from quests import increment_quest_progress
+
+            quest_guild_id = str(message.guild.id)
+            quest_channel_id = str(message.channel.id)
+            if (
+                message.content
+                and message.content.strip()
+                and not is_quest_exception_channel(quest_guild_id, quest_channel_id)
+            ):
+                increment_quest_progress(
+                    quest_guild_id,
+                    str(message.author.id),
+                    "messages_sent",
+                    1,
+                )
+        except Exception as e:
+            logger.error(f"Erreur lors de la progression de quête (messages_sent): {e}")
+
         # --- AI MODERATION ---
         # Analyze message with AI if enabled and not in counter game
         try:
@@ -1153,7 +1380,7 @@ class ISROBOT(commands.Bot):
             from utils.ai_toggle import check_ai_enabled
 
             guild_id = str(message.guild.id)
-            
+
             # Check global AI toggle first
             if not check_ai_enabled("moderation"):
                 pass  # AI moderation is globally disabled, skip analysis
@@ -1170,14 +1397,16 @@ class ISROBOT(commands.Bot):
                     ai_flag_channel_id = config.get("ai_flag_channel_id")
 
                     # Get server rules
-                    server_rules = await ai_moderation.get_server_rules(message.guild, rules_message_id)
+                    server_rules = await ai_moderation.get_server_rules(
+                        message.guild, rules_message_id
+                    )
 
                     # Analyze message
-                    result = await ai_moderation.analyze_message_with_ollama(
+                    result = await ai_moderation.analyze_message(
                         message.content,
                         server_rules,
-                        ollama_host,
-                        ai_model
+                        model=ai_model,
+                        host=ollama_host,
                     )
 
                     # If analysis succeeded and score is above threshold, create flag
@@ -1187,7 +1416,7 @@ class ISROBOT(commands.Bot):
                             message,
                             result["score"],
                             result["category"],
-                            result["reason"]
+                            result["reason"],
                         )
 
                         # Post to AI flag channel
@@ -1199,7 +1428,7 @@ class ISROBOT(commands.Bot):
                                     message,
                                     result["score"],
                                     result["category"],
-                                    result["reason"]
+                                    result["reason"],
                                 )
                                 await channel.send(embed=embed)
                                 logger.info(
@@ -1239,7 +1468,7 @@ class ISROBOT(commands.Bot):
         # Only check if it's a digit before acquiring the lock
         if not (message.content.isdigit() and not str(message.content).isspace()):
             return
-        
+
         # Validate the number is within reasonable bounds to prevent integer overflow
         try:
             number = int(message.content)
@@ -1276,7 +1505,7 @@ class ISROBOT(commands.Bot):
                         message,
                         cursor,
                         conn,
-                        "Vous ne pouvez pas compter deux fois de suite !",
+                        t("count.same_user", None),
                     )
                     return
                 if str(int(message.content)) == str(result["count"] + 1):
@@ -1293,13 +1522,28 @@ class ISROBOT(commands.Bot):
                     )
                     conn.commit()
                     conn.close()
+
+                    try:
+                        from quests import increment_quest_progress
+
+                        increment_quest_progress(
+                            guild_id,
+                            str(message.author.id),
+                            "counting_participation",
+                            1,
+                        )
+                    except Exception as qe:
+                        logger.error(
+                            f"Erreur lors de la progression de quête "
+                            f"(counting_participation): {qe}"
+                        )
                     return
                 elif str(int(message.content)) == str(result["count"]):
                     await self.reset_counter_game(
                         message,
                         cursor,
                         conn,
-                        f"Vous avez mis le même chiffre ! Le bon chiffre était {last_count + 1}",
+                        t("count.same_number", None, expected=last_count + 1),
                     )
                     return
                 else:
@@ -1308,8 +1552,12 @@ class ISROBOT(commands.Bot):
                         message,
                         cursor,
                         conn,
-                        f"Mauvais chiffre ! Le bon chiffre était {last_count + 1}, "
-                        f"mais vous avez mis {message.content}.",
+                        t(
+                            "count.wrong_number",
+                            None,
+                            expected=last_count + 1,
+                            actual=message.content,
+                        ),
                     )
                     return
             except Exception as e:
@@ -1320,7 +1568,7 @@ class ISROBOT(commands.Bot):
     async def close(self):
         """Fermer proprement la session HTTP quand le bot se ferme."""
         logger.info("Démarrage de l'arrêt gracieux du bot...")
-        
+
         # Arrêter la tâche de vérification des streams
         if hasattr(self, "stream_check_task") and not self.stream_check_task.done():
             logger.info("Arrêt de la tâche de vérification Twitch...")
@@ -1336,17 +1584,22 @@ class ISROBOT(commands.Bot):
             logger.info("Arrêt de la tâche de vérification YouTube...")
             self.youtube_check_task.cancel()
 
+        # Arrêter la tâche de vérification Bluesky
+        if hasattr(self, "bluesky_check_task") and not self.bluesky_check_task.done():
+            logger.info("Arrêt de la tâche de vérification Bluesky...")
+            self.bluesky_check_task.cancel()
+
         # Arrêter les tâches de modération
         if hasattr(self, "warning_decay_task"):
             self.warning_decay_task.cancel()
 
         if hasattr(self, "mute_expiration_task"):
             self.mute_expiration_task.cancel()
-        
+
         # Arrêter la tâche de sauvegarde automatique
         if hasattr(self, "backup_task"):
             self.backup_task.cancel()
-        
+
         # Arrêter la tâche de nettoyage du rate limiter
         if hasattr(self, "rate_limit_cleanup_task"):
             self.rate_limit_cleanup_task.cancel()
@@ -1354,7 +1607,7 @@ class ISROBOT(commands.Bot):
         if self.session:
             await self.session.close()
             logger.info("Session HTTP fermée")
-        
+
         logger.info("Arrêt du bot...")
         await super().close()
         logger.info("Bot arrêté avec succès")
@@ -1364,13 +1617,16 @@ class ISROBOT(commands.Bot):
         if self.user:
             logger.info(f"Connecté en tant que {self.user} (ID: {self.user.id})")
             await self.change_presence(
-                activity=discord.CustomActivity(name="Prêt à aider !", emoji="🤖")
+                activity=discord.CustomActivity(
+                    name=t("bot.presence", None), emoji="🤖"
+                )
             )
         else:
             logger.error("Erreur: Utilisateur non défini")
 
 
 client = ISROBOT()
+
 
 def signal_handler(sig, frame):
     """Gestionnaire de signal pour arrêt gracieux."""
@@ -1383,6 +1639,7 @@ def signal_handler(sig, frame):
     else:
         # Si le loop n'est pas en cours, forcer l'arrêt
         sys.exit(0)
+
 
 # Enregistrer les gestionnaires de signaux pour arrêt gracieux
 if sys.platform != "win32":

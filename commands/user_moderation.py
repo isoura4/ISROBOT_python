@@ -13,6 +13,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from utils import moderation_utils
+from utils.i18n import get_locale, t, tr
 
 load_dotenv()
 
@@ -24,14 +25,12 @@ class UserModeration(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(
-        name="appeal",
-        description="Faire appel d'un avertissement"
-    )
-    @app_commands.describe(reason="Raison de votre appel (max 1000 caractères)")
+    @app_commands.command(name="appeal", description=tr("cmd.appeal.desc"))
+    @app_commands.describe(reason=tr("cmd.appeal.reason"))
     @app_commands.guilds(discord.Object(id=SERVER_ID))
     async def appeal(self, interaction: discord.Interaction, reason: str):
         """Submit an appeal against warnings."""
+        locale = get_locale(interaction)
         await interaction.response.defer(ephemeral=True)
 
         try:
@@ -42,28 +41,28 @@ class UserModeration(commands.Cog):
             warn_count = moderation_utils.get_warning_count(guild_id, user_id)
             if warn_count <= 0:
                 await interaction.followup.send(
-                    "❌ Vous n'avez aucun avertissement actif.",
-                    ephemeral=True
+                    t("appeal.no_warns", locale), ephemeral=True
                 )
                 return
 
             # Check appeal length
             if len(reason) > 1000:
                 await interaction.followup.send(
-                    "❌ Votre raison d'appel est trop longue (max 1000 caractères).",
-                    ephemeral=True
+                    t("appeal.too_long", locale),
+                    ephemeral=True,
                 )
                 return
 
             # Check cooldown (48 hours) - database-backed
-            remaining_cooldown = moderation_utils.check_appeal_cooldown(guild_id, user_id)
+            remaining_cooldown = moderation_utils.check_appeal_cooldown(
+                guild_id, user_id
+            )
             if remaining_cooldown:
                 hours = int(remaining_cooldown.total_seconds() // 3600)
                 minutes = int((remaining_cooldown.total_seconds() % 3600) // 60)
                 await interaction.followup.send(
-                    f"⏳ Vous devez attendre encore {hours}h {minutes}m "
-                    f"avant de soumettre un nouvel appel.",
-                    ephemeral=True
+                    t("appeal.cooldown", locale, hours=hours, minutes=minutes),
+                    ephemeral=True,
                 )
                 return
 
@@ -72,46 +71,47 @@ class UserModeration(commands.Cog):
 
             if appeal_id is None:
                 await interaction.followup.send(
-                    "❌ Vous avez déjà un appel en attente.",
-                    ephemeral=True
+                    t("appeal.pending", locale), ephemeral=True
                 )
                 return
 
             # Send confirmation to user
             embed = discord.Embed(
-                title="✅ Appel soumis",
-                description="Votre appel a été soumis aux modérateurs.",
+                title=t("appeal.submitted_title", locale),
+                description=t("appeal.submitted_desc", locale),
                 color=discord.Color.green(),
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(timezone.utc),
             )
-            embed.add_field(name="Raison", value=reason, inline=False)
             embed.add_field(
-                name="Prochaines étapes",
-                value="Les modérateurs examineront votre appel. "
-                      "Vous recevrez un message privé avec leur décision.",
-                inline=False
+                name=t("mod.field.reason", locale), value=reason, inline=False
             )
-            embed.set_footer(text="Système de modération ISROBOT")
+            embed.add_field(
+                name=t("appeal.next_steps", locale),
+                value=t("appeal.next_steps_value", locale),
+                inline=False,
+            )
+            embed.set_footer(text=t("mod.footer", locale))
 
             await interaction.followup.send(embed=embed, ephemeral=True)
 
             # Post to appeal channel
             config = moderation_utils.get_moderation_config(guild_id)
-            if config and config.get('appeal_channel_id'):
+            if config and config.get("appeal_channel_id"):
                 await self._post_appeal_to_channel(
                     interaction.guild,
-                    config['appeal_channel_id'],
+                    config["appeal_channel_id"],
                     appeal_id,
                     interaction.user,
                     warn_count,
-                    reason
+                    reason,
+                    locale,
                 )
 
         except Exception as e:
             logger.error(f"Error in appeal command: {e}")
             await interaction.followup.send(
-                "❌ Une erreur s'est produite lors de la soumission de votre appel.",
-                ephemeral=True
+                t("appeal.error", locale),
+                ephemeral=True,
             )
 
     async def _post_appeal_to_channel(
@@ -121,7 +121,8 @@ class UserModeration(commands.Cog):
         appeal_id: int,
         user: discord.Member,
         warn_count: int,
-        reason: str
+        reason: str,
+        locale: str = None,
     ):
         """Post an appeal to the appeal review channel."""
         try:
@@ -131,22 +132,22 @@ class UserModeration(commands.Cog):
                 return
 
             embed = discord.Embed(
-                title=f"📝 Nouvel appel - ID #{appeal_id}",
-                description=f"**Utilisateur:** {user.mention} ({user.id})",
+                title=t("appeal.new_title", locale, id=appeal_id),
+                description=t(
+                    "appeal.new_desc", locale, user=f"{user.mention} ({user.id})"
+                ),
                 color=discord.Color.purple(),
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(timezone.utc),
             )
 
             embed.add_field(
-                name="Avertissements actuels",
+                name=t("appeal.current_warns", locale),
                 value=str(warn_count),
-                inline=True
+                inline=True,
             )
 
             embed.add_field(
-                name="Raison de l'appel",
-                value=reason,
-                inline=False
+                name=t("appeal.reason_of_appeal", locale), value=reason, inline=False
             )
 
             # Get user history
@@ -161,15 +162,15 @@ class UserModeration(commands.Cog):
                         f"<t:{int(created_at.timestamp())}:R>"
                     )
                 embed.add_field(
-                    name="Historique récent",
+                    name=t("appeal.recent_history", locale),
                     value="\n".join(recent_history),
-                    inline=False
+                    inline=False,
                 )
 
-            embed.set_footer(text="Utilisez les boutons ci-dessous pour examiner l'appel")
+            embed.set_footer(text=t("appeal.review_footer", locale))
 
             # Create view with buttons
-            view = AppealReviewView(appeal_id, user.id, self.bot)
+            view = AppealReviewView(appeal_id, user.id, self.bot, locale)
             await channel.send(embed=embed, view=view)
 
         except Exception as e:
@@ -179,63 +180,77 @@ class UserModeration(commands.Cog):
 class AppealReviewView(discord.ui.View):
     """View with buttons to review an appeal."""
 
-    def __init__(self, appeal_id: int, user_id: int, bot: commands.Bot):
+    def __init__(
+        self,
+        appeal_id: int,
+        user_id: int,
+        bot: commands.Bot,
+        locale: str = None,
+    ):
         super().__init__(timeout=None)
         self.appeal_id = appeal_id
         self.user_id = user_id
         self.bot = bot
+        self.locale = locale
+        # Localiser les libellés des boutons de cette instance
+        for item in self.children:
+            if getattr(item, "custom_id", None) == "appeal_approve":
+                item.label = t("appeal.btn_approve", locale)
+            elif getattr(item, "custom_id", None) == "appeal_deny":
+                item.label = t("appeal.btn_deny", locale)
 
     @discord.ui.button(
         label="✅ Approuver",
         style=discord.ButtonStyle.success,
-        custom_id="appeal_approve"
+        custom_id="appeal_approve",
     )
     async def approve_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         """Approve the appeal."""
-        await self._handle_appeal_decision(interaction, "approved", "Appel approuvé par le modérateur")
+        await self._handle_appeal_decision(
+            interaction,
+            "approved",
+            t("appeal.decision_approved_reason", self.locale),
+        )
 
     @discord.ui.button(
-        label="❌ Refuser",
-        style=discord.ButtonStyle.danger,
-        custom_id="appeal_deny"
+        label="❌ Refuser", style=discord.ButtonStyle.danger, custom_id="appeal_deny"
     )
     async def deny_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         """Deny the appeal."""
         # Show modal for reason
-        modal = AppealDecisionModal(self.appeal_id, self.user_id, "denied", self.bot)
+        modal = AppealDecisionModal(
+            self.appeal_id, self.user_id, "denied", self.bot, self.locale
+        )
         await interaction.response.send_modal(modal)
 
     async def _handle_appeal_decision(
         self, interaction: discord.Interaction, decision: str, moderator_decision: str
     ):
         """Handle the appeal decision."""
+        locale = self.locale
         await interaction.response.defer(ephemeral=True)
 
         try:
             # Check permissions
             if not interaction.user.guild_permissions.moderate_members:
                 await interaction.followup.send(
-                    "❌ Vous n'avez pas la permission de gérer les appels.",
-                    ephemeral=True
+                    t("appeal.no_perm", locale),
+                    ephemeral=True,
                 )
                 return
 
             # Review appeal
             success = moderation_utils.review_appeal(
-                self.appeal_id,
-                str(interaction.user.id),
-                decision,
-                moderator_decision
+                self.appeal_id, str(interaction.user.id), decision, moderator_decision
             )
 
             if not success:
                 await interaction.followup.send(
-                    "❌ Appel introuvable.",
-                    ephemeral=True
+                    t("appeal.not_found", locale), ephemeral=True
                 )
                 return
 
@@ -248,20 +263,24 @@ class AppealReviewView(discord.ui.View):
                     guild_id,
                     user_id,
                     str(interaction.user.id),
-                    "Appel approuvé"
+                    t("appeal.decision_approved_db", locale),
                 )
 
-                # If warnings reach 0, remove mute
+                # If warnings reach 0, remove the automatic mute (if any).
+                # Manual mutes are left untouched.
                 if new_count == 0:
+                    active_mute = moderation_utils.get_active_mute(guild_id, user_id)
                     member = interaction.guild.get_member(int(user_id))
-                    if member:
+                    if member and active_mute and active_mute.get("is_auto"):
                         try:
-                            await member.timeout(None, reason="Appel approuvé - avertissements = 0")
+                            await member.timeout(
+                                None, reason=t("appeal.timeout_reason", locale)
+                            )
                             moderation_utils.remove_mute(
                                 guild_id,
                                 user_id,
                                 str(interaction.user.id),
-                                "Appel approuvé"
+                                t("appeal.decision_approved_db", locale),
                             )
                         except Exception as e:
                             logger.error(f"Error removing timeout: {e}")
@@ -269,39 +288,49 @@ class AppealReviewView(discord.ui.View):
             # Send DM to user
             member = interaction.guild.get_member(int(user_id))
             if member:
+                title_key = (
+                    "appeal.approved_title"
+                    if decision == "approved"
+                    else "appeal.denied_title"
+                )
                 embed = discord.Embed(
-                    title=f"{'✅ Appel approuvé' if decision == 'approved' else '❌ Appel refusé'}",
-                    description=f"Votre appel sur **{interaction.guild.name}** a été examiné.",
-                    color=discord.Color.green() if decision == "approved" else discord.Color.red(),
-                    timestamp=datetime.now(timezone.utc)
+                    title=t(title_key, locale),
+                    description=t(
+                        "appeal.reviewed_desc", locale, guild=interaction.guild.name
+                    ),
+                    color=(
+                        discord.Color.green()
+                        if decision == "approved"
+                        else discord.Color.red()
+                    ),
+                    timestamp=datetime.now(timezone.utc),
                 )
                 embed.add_field(
-                    name="Décision du modérateur",
+                    name=t("appeal.mod_decision", locale),
                     value=moderator_decision,
-                    inline=False
+                    inline=False,
                 )
 
                 if decision == "approved":
                     new_count = moderation_utils.get_warning_count(guild_id, user_id)
                     embed.add_field(
-                        name="Nouveaux avertissements",
+                        name=t("appeal.new_warns", locale),
                         value=str(new_count),
-                        inline=True
+                        inline=True,
                     )
                     embed.add_field(
-                        name="Message",
-                        value="Un avertissement a été retiré. Continuez à respecter les règles!",
-                        inline=False
+                        name=t("mod.field.reason", locale),
+                        value=t("appeal.removed_msg", locale),
+                        inline=False,
                     )
                 else:
                     embed.add_field(
-                        name="Prochaines étapes",
-                        value="Si vous n'êtes pas d'accord avec cette décision, "
-                              "vous pouvez contacter un administrateur.",
-                        inline=False
+                        name=t("appeal.next_steps", locale),
+                        value=t("appeal.deny_next_steps", locale),
+                        inline=False,
                     )
 
-                embed.set_footer(text="Système de modération ISROBOT")
+                embed.set_footer(text=t("mod.footer", locale))
                 await moderation_utils.send_dm_notification(member, embed)
 
             # Update the message
@@ -309,53 +338,73 @@ class AppealReviewView(discord.ui.View):
                 item.disabled = True
 
             original_embed = interaction.message.embeds[0]
-            original_embed.color = discord.Color.green() if decision == "approved" else discord.Color.red()
+            original_embed.color = (
+                discord.Color.green() if decision == "approved" else discord.Color.red()
+            )
+            decision_key = (
+                "appeal.approved_by" if decision == "approved" else "appeal.denied_by"
+            )
             original_embed.add_field(
-                name="Décision",
-                value=f"{'✅ Approuvé' if decision == 'approved' else '❌ Refusé'} par {interaction.user.mention}",
-                inline=False
+                name=t("appeal.decision_field", locale),
+                value=t(decision_key, locale, user=interaction.user.mention),
+                inline=False,
             )
 
             await interaction.message.edit(embed=original_embed, view=self)
 
+            result_key = (
+                "appeal.result_approved"
+                if decision == "approved"
+                else "appeal.result_denied"
+            )
             await interaction.followup.send(
-                f"✅ Appel {'approuvé' if decision == 'approved' else 'refusé'}.",
-                ephemeral=True
+                t("appeal.result", locale, status=t(result_key, locale)),
+                ephemeral=True,
             )
 
         except Exception as e:
             logger.error(f"Error handling appeal decision: {e}")
             await interaction.followup.send(
-                "❌ Une erreur s'est produite.",
-                ephemeral=True
+                t("appeal.error_generic", locale), ephemeral=True
             )
 
 
-class AppealDecisionModal(discord.ui.Modal, title="Refuser l'appel"):
+class AppealDecisionModal(discord.ui.Modal):
     """Modal to get reason for denying an appeal."""
 
-    decision_reason = discord.ui.TextInput(
-        label="Raison du refus",
-        style=discord.TextStyle.paragraph,
-        placeholder="Expliquez pourquoi l'appel est refusé...",
-        required=True,
-        max_length=500
-    )
-
-    def __init__(self, appeal_id: int, user_id: int, decision: str, bot: commands.Bot):
-        super().__init__()
+    def __init__(
+        self,
+        appeal_id: int,
+        user_id: int,
+        decision: str,
+        bot: commands.Bot,
+        locale: str = None,
+    ):
+        super().__init__(title=t("appeal.deny_modal.title", locale))
         self.appeal_id = appeal_id
         self.user_id = user_id
         self.decision = decision
         self.bot = bot
+        self.locale = locale
+
+        self.decision_reason = discord.ui.TextInput(
+            label=t("appeal.deny_modal.label", locale),
+            style=discord.TextStyle.paragraph,
+            placeholder=t("appeal.deny_modal.placeholder", locale),
+            required=True,
+            max_length=500,
+        )
+        self.add_item(self.decision_reason)
 
     async def on_submit(self, interaction: discord.Interaction):
         """Handle modal submission."""
         moderator_decision = self.decision_reason.value
 
         # Find the view and call the handler
-        view = AppealReviewView(self.appeal_id, self.user_id, self.bot)
-        await view._handle_appeal_decision(interaction, self.decision, moderator_decision)
+        view = AppealReviewView(self.appeal_id, self.user_id, self.bot, self.locale)
+        await view._handle_appeal_decision(
+            interaction, self.decision, moderator_decision
+        )
 
 
 async def setup(bot: commands.Bot):

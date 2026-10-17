@@ -9,8 +9,8 @@ This module provides migration scripts to:
 """
 
 import logging
-import re
 import os
+import re
 import shutil
 import sqlite3
 from datetime import datetime
@@ -76,9 +76,7 @@ def remove_corners_column(db_path=None):
         column_names = [col[1] for col in columns]
 
         if "corners" not in column_names:
-            logger.info(
-                "Column 'corners' does not exist in users table. Skipping."
-            )
+            logger.info("Column 'corners' does not exist in users table. Skipping.")
             return True
 
         # Begin transaction
@@ -527,9 +525,7 @@ def seed_default_shop_items(db_path=None):
         cursor.execute("SELECT COUNT(*) FROM shop_items")
         count = cursor.fetchone()[0]
         if count > 0:
-            logger.info(
-                f"Shop items table already has {count} entries. Skipping seed."
-            )
+            logger.info(f"Shop items table already has {count} entries. Skipping seed.")
             return True
 
         cursor.executemany(
@@ -599,6 +595,17 @@ def ensure_table_columns(db_path=None):
             ("userId", "TEXT NOT NULL"),
             ("lastUserId", "TEXT DEFAULT '0'"),
             ("count", "INTEGER DEFAULT 0"),
+        ],
+        "bluesky_accounts": [
+            ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
+            ("handle", "TEXT NOT NULL"),
+            ("did", "TEXT"),
+            ("displayName", "TEXT"),
+            ("discordChannelId", "TEXT NOT NULL"),
+            ("roleId", "TEXT"),
+            ("lastPostUri", "TEXT"),
+            ("lastPostCid", "TEXT"),
+            ("createdAt", "TEXT"),
         ],
         "warnings": [
             ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
@@ -672,6 +679,7 @@ def ensure_table_columns(db_path=None):
             ("reason", "TEXT NOT NULL"),
             ("expires_at", "TEXT NOT NULL"),
             ("created_at", "TEXT NOT NULL"),
+            ("is_auto", "INTEGER DEFAULT 0"),
         ],
         "guild_settings": [
             ("guildId", "TEXT PRIMARY KEY"),
@@ -826,9 +834,7 @@ def ensure_table_columns(db_path=None):
                 if col_name not in existing_cols:
                     # Validate column name to prevent SQL injection
                     if not _valid_identifier.match(col_name):
-                        logger.warning(
-                            f"Skipping invalid column name: {col_name}"
-                        )
+                        logger.warning(f"Skipping invalid column name: {col_name}")
                         continue
 
                     # Remove PRIMARY KEY / NOT NULL / UNIQUE constraints

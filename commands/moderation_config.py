@@ -13,6 +13,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from utils import moderation_utils
+from utils.i18n import get_locale, t, tr
 
 load_dotenv()
 
@@ -26,14 +27,15 @@ class ModerationConfig(commands.Cog):
 
     modconfig = app_commands.Group(
         name="modconfig",
-        description="Configurer le système de modération",
-        guild_ids=[SERVER_ID]
+        description=tr("cmd.modconfig.desc"),
+        guild_ids=[SERVER_ID],
     )
 
-    @modconfig.command(name="view", description="Afficher la configuration de modération")
+    @modconfig.command(name="view", description=tr("cmd.modconfig.view.desc"))
     @app_commands.checks.has_permissions(administrator=True)
     async def view_config(self, interaction: discord.Interaction):
         """View current moderation configuration."""
+        locale = get_locale(interaction)
         await interaction.response.defer(ephemeral=True)
 
         try:
@@ -41,77 +43,97 @@ class ModerationConfig(commands.Cog):
             config = moderation_utils.get_moderation_config(guild_id)
 
             embed = discord.Embed(
-                title="⚙️ Configuration de modération",
+                title=t("modconfig.title", locale),
                 color=discord.Color.blue(),
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(timezone.utc),
             )
 
             if not config:
-                embed.description = (
-                    "⚠️ Aucune configuration trouvée. "
-                    "Utilisez `/modconfig set` pour configurer le système."
-                )
+                embed.description = t("modconfig.empty", locale)
                 await interaction.followup.send(embed=embed, ephemeral=True)
                 return
 
             # Channels
-            log_channel = f"<#{config['log_channel_id']}>" if config.get('log_channel_id') else "Non configuré"
-            appeal_channel = f"<#{config['appeal_channel_id']}>" if config.get('appeal_channel_id') else "Non configuré"
-            ai_flag_channel = f"<#{config['ai_flag_channel_id']}>" if config.get('ai_flag_channel_id') else "Non configuré"
+            log_channel = (
+                f"<#{config['log_channel_id']}>"
+                if config.get("log_channel_id")
+                else t("modconfig.not_set", locale)
+            )
+            appeal_channel = (
+                f"<#{config['appeal_channel_id']}>"
+                if config.get("appeal_channel_id")
+                else t("modconfig.not_set", locale)
+            )
+            ai_flag_channel = (
+                f"<#{config['ai_flag_channel_id']}>"
+                if config.get("ai_flag_channel_id")
+                else t("modconfig.not_set", locale)
+            )
 
             embed.add_field(
-                name="📢 Canaux",
-                value=(
-                    f"**Log:** {log_channel}\n"
-                    f"**Appels:** {appeal_channel}\n"
-                    f"**Flags IA:** {ai_flag_channel}"
+                name=t("modconfig.field_channels", locale),
+                value=t(
+                    "modconfig.channels_value",
+                    locale,
+                    log=log_channel,
+                    appeal=appeal_channel,
+                    flag=ai_flag_channel,
                 ),
-                inline=False
+                inline=False,
             )
 
             # AI settings
-            ai_enabled = "✅ Activé" if config.get('ai_enabled', 1) else "❌ Désactivé"
+            ai_enabled = (
+                t("modconfig.ai_on", locale)
+                if config.get("ai_enabled", 1)
+                else t("modconfig.ai_off", locale)
+            )
             embed.add_field(
-                name="🤖 Configuration IA",
-                value=(
-                    f"**Statut:** {ai_enabled}\n"
-                    f"**Seuil de confiance:** {config.get('ai_confidence_threshold', 60)}/100\n"
-                    f"**Modèle:** {config.get('ai_model', 'llama2')}\n"
-                    f"**Hôte Ollama:** {config.get('ollama_host', 'http://localhost:11434')}"
+                name=t("modconfig.field_ai", locale),
+                value=t(
+                    "modconfig.ai_value",
+                    locale,
+                    status=ai_enabled,
+                    threshold=config.get("ai_confidence_threshold", 60),
+                    model=config.get("ai_model", "llama2"),
+                    host=config.get("ollama_host", "http://localhost:11434"),
                 ),
-                inline=False
+                inline=False,
             )
 
             # Warning decay settings
             embed.add_field(
-                name="⏰ Expiration des avertissements",
-                value=(
-                    f"**1 avertissement:** {config.get('warn_1_decay_days', 7)} jours\n"
-                    f"**2 avertissements:** {config.get('warn_2_decay_days', 14)} jours\n"
-                    f"**3 avertissements:** {config.get('warn_3_decay_days', 21)} jours\n"
-                    f"**4+ avertissements:** 28 jours"
+                name=t("modconfig.field_decay", locale),
+                value=t(
+                    "modconfig.decay_value",
+                    locale,
+                    d1=config.get("warn_1_decay_days", 7),
+                    d2=config.get("warn_2_decay_days", 14),
+                    d3=config.get("warn_3_decay_days", 21),
                 ),
-                inline=False
+                inline=False,
             )
 
             # Mute durations
-            mute_2 = config.get('mute_duration_warn_2', 3600)
-            mute_3 = config.get('mute_duration_warn_3', 86400)
+            mute_2 = config.get("mute_duration_warn_2", 3600)
+            mute_3 = config.get("mute_duration_warn_3", 86400)
             embed.add_field(
-                name="🔇 Durées de mute automatique",
-                value=(
-                    f"**2 avertissements:** {moderation_utils.format_duration(mute_2)}\n"
-                    f"**3 avertissements:** {moderation_utils.format_duration(mute_3)}"
+                name=t("modconfig.field_mute", locale),
+                value=t(
+                    "modconfig.mute_value",
+                    locale,
+                    m2=moderation_utils.format_duration(mute_2, locale),
+                    m3=moderation_utils.format_duration(mute_3, locale),
                 ),
-                inline=False
+                inline=False,
             )
 
             # Rules message
-            rules_msg = config.get('rules_message_id', 'Non configuré')
+            rules_msg = config.get("rules_message_id", t("modconfig.not_set", locale))
             embed.add_field(
-                name="📋 Message des règles",
-                value=f"**ID:** {rules_msg}",
-                inline=False
+                name=t("modconfig.field_rules", locale),
+                value=t("modconfig.rules_value", locale, id=rules_msg),
+                inline=False,
             )
 
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -119,21 +141,20 @@ class ModerationConfig(commands.Cog):
         except Exception as e:
             logger.error(f"Error in view_config command: {e}")
             await interaction.followup.send(
-                "❌ Une erreur s'est produite lors de la récupération de la configuration.",
-                ephemeral=True
+                t("modconfig.error", locale),
+                ephemeral=True,
             )
 
-    @modconfig.command(name="set", description="Configurer un paramètre de modération")
+    @modconfig.command(name="set", description=tr("cmd.modconfig.set.desc"))
     @app_commands.describe(
-        parameter="Paramètre à configurer",
-        value="Nouvelle valeur"
+        parameter=tr("cmd.modconfig.set.param"), value=tr("cmd.modconfig.set.value")
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def set_config(
-        self, interaction: discord.Interaction, 
-        parameter: str, value: str
+        self, interaction: discord.Interaction, parameter: str, value: str
     ):
         """Set a moderation configuration parameter."""
+        locale = get_locale(interaction)
         await interaction.response.defer(ephemeral=True)
 
         guild_id = str(interaction.guild.id)
@@ -174,14 +195,8 @@ class ModerationConfig(commands.Cog):
 
         if parameter not in valid_params:
             await interaction.followup.send(
-                f"❌ Paramètre invalide: `{parameter}`\n"
-                f"**Paramètres valides:**\n"
-                f"- Canaux: `log_channel`, `appeal_channel`, `ai_flag_channel`\n"
-                f"- IA: `ai_enabled`, `ai_confidence_threshold`, `ai_model`, `ollama_host`\n"
-                f"- Règles: `rules_message_id`\n"
-                f"- Expiration: `warn_1_decay_days`, `warn_2_decay_days`, `warn_3_decay_days`\n"
-                f"- Mutes: `mute_duration_2`, `mute_duration_3`",
-                ephemeral=True
+                t("modconfig.invalid_param", locale, param=parameter),
+                ephemeral=True,
             )
             return
 
@@ -192,8 +207,8 @@ class ModerationConfig(commands.Cog):
 
             if validated_value is None:
                 await interaction.followup.send(
-                    f"❌ Valeur invalide pour `{parameter}`: `{value}`",
-                    ephemeral=True
+                    t("modconfig.invalid_value", locale, param=parameter, value=value),
+                    ephemeral=True,
                 )
                 return
 
@@ -201,19 +216,20 @@ class ModerationConfig(commands.Cog):
             db_param = param_map.get(parameter, parameter)
 
             # Set configuration
-            moderation_utils.set_moderation_config(guild_id, db_param, str(validated_value))
+            moderation_utils.set_moderation_config(
+                guild_id, db_param, str(validated_value)
+            )
 
             await interaction.followup.send(
-                f"✅ Configuration mise à jour:\n"
-                f"**{parameter}** = `{validated_value}`",
-                ephemeral=True
+                t("modconfig.updated", locale, param=parameter, value=validated_value),
+                ephemeral=True,
             )
 
         except Exception as e:
             logger.error(f"Error in set_config command: {e}")
             await interaction.followup.send(
-                f"❌ Une erreur s'est produite lors de la configuration: {e}",
-                ephemeral=True
+                t("modconfig.set_error", locale, error=e),
+                ephemeral=True,
             )
 
     # --- Validation Methods ---

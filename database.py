@@ -32,7 +32,7 @@ def get_db_connection():
             "Le chemin de la base de données n'est pas défini "
             "dans les variables d'environnement."
         )
-    
+
     conn = None
     try:
         conn = sqlite3.connect(DB_PATH, timeout=10.0)
@@ -42,7 +42,9 @@ def get_db_connection():
         # Fermer la connexion si elle a été créée mais que la configuration a échoué
         if conn:
             conn.close()
-        raise RuntimeError(f"Impossible de se connecter à la base de données {DB_PATH}: {e}")
+        raise RuntimeError(
+            f"Impossible de se connecter à la base de données {DB_PATH}: {e}"
+        )
 
 
 def create_database():
@@ -66,8 +68,7 @@ def create_database():
     cursor = conn.cursor()
 
     # Création de la table des utilisateurs
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             guildId TEXT NOT NULL,
             userId TEXT NOT NULL,
@@ -75,15 +76,12 @@ def create_database():
             level INTEGER DEFAULT 1,
             messages INTEGER DEFAULT 0,
             coins REAL DEFAULT 0,
-            corners INTEGER DEFAULT 0,
             PRIMARY KEY (guildId, userId)
         )
-    """
-    )
+    """)
 
     # Création de la table des streamers
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS streamers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             streamerName TEXT NOT NULL,
@@ -92,12 +90,10 @@ def create_database():
             announced INTEGER DEFAULT 0,
             startTime TEXT
         )
-    """
-    )
+    """)
 
     # Création de la table des chaînes YouTube
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS youtube_channels (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             channelId TEXT NOT NULL,
@@ -111,12 +107,25 @@ def create_database():
             notifyShorts INTEGER DEFAULT 1,
             notifyLive INTEGER DEFAULT 1
         )
-    """
-    )
+    """)
+
+    # Création de la table des comptes Bluesky
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS bluesky_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            handle TEXT NOT NULL,
+            did TEXT,
+            displayName TEXT,
+            discordChannelId TEXT NOT NULL,
+            roleId TEXT,
+            lastPostUri TEXT,
+            lastPostCid TEXT,
+            createdAt TEXT
+        )
+    """)
 
     # Création de la table pour le jeu du compteur
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS counter_game (
             guildId TEXT NOT NULL,
             channelId TEXT NOT NULL,
@@ -126,14 +135,12 @@ def create_database():
             count INTEGER DEFAULT 0,
             PRIMARY KEY (guildId, channelId)
         )
-    """
-    )
+    """)
 
     # --- MODERATION SYSTEM TABLES ---
 
     # Table des avertissements (warnings)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS warnings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guild_id TEXT NOT NULL,
@@ -143,20 +150,16 @@ def create_database():
             updated_at TEXT NOT NULL,
             UNIQUE(guild_id, user_id)
         )
-    """
-    )
+    """)
 
     # Index pour les recherches fréquentes
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_warnings_guild_user 
         ON warnings(guild_id, user_id)
-    """
-    )
+    """)
 
     # Historique des avertissements (audit trail immuable)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS warning_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guild_id TEXT NOT NULL,
@@ -168,20 +171,16 @@ def create_database():
             reason TEXT,
             created_at TEXT NOT NULL
         )
-    """
-    )
+    """)
 
     # Index pour les recherches d'historique
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_history_guild_user 
         ON warning_history(guild_id, user_id)
-    """
-    )
+    """)
 
     # Table des appels (appeals)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS moderation_appeals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guild_id TEXT NOT NULL,
@@ -195,20 +194,16 @@ def create_database():
             reviewed_at TEXT,
             FOREIGN KEY(warning_history_id) REFERENCES warning_history(id)
         )
-    """
-    )
+    """)
 
     # Index pour les appels en attente
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_appeals_status 
         ON moderation_appeals(guild_id, status)
-    """
-    )
+    """)
 
     # Configuration de modération par serveur
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS moderation_config (
             guild_id TEXT PRIMARY KEY,
             log_channel_id TEXT,
@@ -227,12 +222,10 @@ def create_database():
             rules_message_id TEXT,
             created_at TEXT NOT NULL
         )
-    """
-    )
+    """)
 
     # Table des messages signalés par l'IA
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS ai_flags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guild_id TEXT NOT NULL,
@@ -249,20 +242,16 @@ def create_database():
             reviewed_at TEXT,
             UNIQUE(message_id)
         )
-    """
-    )
+    """)
 
     # Index pour les flags en attente
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_ai_flags_status 
         ON ai_flags(guild_id, moderator_action)
-    """
-    )
+    """)
 
     # Table des mutes actifs
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS active_mutes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guild_id TEXT NOT NULL,
@@ -271,18 +260,16 @@ def create_database():
             reason TEXT NOT NULL,
             expires_at TEXT NOT NULL,
             created_at TEXT NOT NULL,
+            is_auto INTEGER DEFAULT 0,
             UNIQUE(guild_id, user_id)
         )
-    """
-    )
+    """)
 
     # Index pour les recherches d'expiration
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_mutes_expires 
         ON active_mutes(expires_at)
-    """
-    )
+    """)
 
     conn.commit()
     conn.close()

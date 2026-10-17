@@ -6,28 +6,18 @@ transaction logging, and safe database operations.
 """
 
 import json
-import math
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional
 
 from database import get_db_connection
-
-# XP-to-level configuration
-LEVEL_MULTIPLIER = 125
-
-
-def calculate_level_from_xp(xp: float) -> int:
-    """Calculate level from XP."""
-    if xp < 0:
-        xp = 0
-    return int(math.sqrt(xp / LEVEL_MULTIPLIER)) + 1
-
-
-def calculate_xp_for_level(level: int) -> float:
-    """Calculate XP required to reach a given level."""
-    return ((level - 1) ** 2) * LEVEL_MULTIPLIER
+from utils.time_utils import utcnow
+from utils.xp import (
+    LEVEL_MULTIPLIER,
+    calculate_level_from_xp,
+    calculate_xp_for_level,
+)
 
 
 @contextmanager
@@ -42,9 +32,7 @@ def transaction(conn: sqlite3.Connection):
 
 
 def ensure_user_exists(
-    guild_id: str,
-    user_id: str,
-    conn: Optional[sqlite3.Connection] = None
+    guild_id: str, user_id: str, conn: Optional[sqlite3.Connection] = None
 ) -> dict:
     """
     Ensure a user exists in the database.
@@ -76,7 +64,8 @@ def ensure_user_exists(
             """,
             (str(guild_id), str(user_id)),
         )
-        conn.commit()
+        if should_close:
+            conn.commit()
 
         return {
             "guildId": str(guild_id),
@@ -92,9 +81,7 @@ def ensure_user_exists(
 
 
 def get_user_balance(
-    guild_id: str,
-    user_id: str,
-    conn: Optional[sqlite3.Connection] = None
+    guild_id: str, user_id: str, conn: Optional[sqlite3.Connection] = None
 ) -> dict:
     """Get user's current balance (coins and xp)."""
     user = ensure_user_exists(guild_id, user_id, conn)
@@ -145,7 +132,8 @@ def add_coins(
             conn=conn,
         )
 
-        conn.commit()
+        if should_close:
+            conn.commit()
 
         return {
             "old_balance": user["coins"],
@@ -180,9 +168,7 @@ def spend_coins(
         user = ensure_user_exists(guild_id, user_id, conn)
 
         if user["coins"] < amount:
-            raise ValueError(
-                f"Insufficient coins: have {user['coins']}, need {amount}"
-            )
+            raise ValueError(f"Insufficient coins: have {user['coins']}, need {amount}")
 
         new_balance = user["coins"] - amount
 
@@ -204,7 +190,8 @@ def spend_coins(
             conn=conn,
         )
 
-        conn.commit()
+        if should_close:
+            conn.commit()
 
         return {
             "old_balance": user["coins"],
@@ -258,7 +245,8 @@ def add_xp(
             conn=conn,
         )
 
-        conn.commit()
+        if should_close:
+            conn.commit()
 
         return {
             "old_xp": user["xp"],
@@ -321,7 +309,8 @@ def spend_xp(
             conn=conn,
         )
 
-        conn.commit()
+        if should_close:
+            conn.commit()
 
         return {
             "old_xp": user["xp"],
@@ -375,10 +364,11 @@ def log_transaction(
                 meta_json,
                 related_id,
                 related_type,
-                datetime.utcnow().isoformat(),
+                utcnow().isoformat(),
             ),
         )
-        conn.commit()
+        if should_close:
+            conn.commit()
         return cursor.lastrowid
     finally:
         if should_close:
@@ -392,7 +382,12 @@ def get_user_transactions(
     kind: Optional[str] = None,
     conn: Optional[sqlite3.Connection] = None,
 ) -> list:
-    """Get recent transactions for a user."""
+    """Get recent transactions for a user.
+
+    When ``kind`` is provided it is matched as a prefix so that grouped
+    filters (e.g. ``capture``) match all related kinds
+    (``capture_win``, ``capture_loss``, ...).
+    """
     should_close = conn is None
     if conn is None:
         conn = get_db_connection()
@@ -403,7 +398,7 @@ def get_user_transactions(
             cursor.execute(
                 """
                 SELECT * FROM transactions
-                WHERE guildId = ? AND userId = ? AND kind = ?
+                WHERE guildId = ? AND userId = ? AND kind LIKE ? || '%'
                 ORDER BY created_at DESC LIMIT ?
                 """,
                 (str(guild_id), str(user_id), kind, limit),
@@ -428,8 +423,7 @@ def get_user_transactions(
 
 
 def get_guild_settings(
-    guild_id: str,
-    conn: Optional[sqlite3.Connection] = None
+    guild_id: str, conn: Optional[sqlite3.Connection] = None
 ) -> dict:
     """Get or create guild settings."""
     should_close = conn is None
@@ -454,7 +448,8 @@ def get_guild_settings(
             """,
             (str(guild_id),),
         )
-        conn.commit()
+        if should_close:
+            conn.commit()
 
         return {
             "guildId": str(guild_id),
@@ -493,9 +488,10 @@ def set_minigame_enabled(
             UPDATE guild_settings SET minigame_enabled = ?, updated_at = ?
             WHERE guildId = ?
             """,
-            (1 if enabled else 0, datetime.utcnow().isoformat(), str(guild_id)),
+            (1 if enabled else 0, utcnow().isoformat(), str(guild_id)),
         )
-        conn.commit()
+        if should_close:
+            conn.commit()
         return True
     finally:
         if should_close:
@@ -531,9 +527,10 @@ def set_minigame_channel(
             UPDATE guild_settings SET minigame_channel_id = ?, updated_at = ?
             WHERE guildId = ?
             """,
-            (channel_id, datetime.utcnow().isoformat(), str(guild_id)),
+            (channel_id, utcnow().isoformat(), str(guild_id)),
         )
-        conn.commit()
+        if should_close:
+            conn.commit()
         return True
     finally:
         if should_close:
@@ -559,7 +556,8 @@ def add_quest_exception_channel(
             """,
             (str(guild_id), str(channel_id)),
         )
-        conn.commit()
+        if should_close:
+            conn.commit()
         return cursor.rowcount > 0
     finally:
         if should_close:
@@ -585,7 +583,8 @@ def remove_quest_exception_channel(
             """,
             (str(guild_id), str(channel_id)),
         )
-        conn.commit()
+        if should_close:
+            conn.commit()
         return cursor.rowcount > 0
     finally:
         if should_close:
@@ -666,7 +665,7 @@ def check_cooldown(
             return False, 0
 
         last_action = datetime.fromisoformat(result[0])
-        now = datetime.utcnow()
+        now = utcnow()
         elapsed = (now - last_action).total_seconds()
 
         if elapsed >= cooldown_seconds:
@@ -703,10 +702,11 @@ def set_cooldown(
                 str(guild_id),
                 str(user_id),
                 action_type,
-                datetime.utcnow().isoformat(),
+                utcnow().isoformat(),
             ),
         )
-        conn.commit()
+        if should_close:
+            conn.commit()
     finally:
         if should_close:
             conn.close()
@@ -747,7 +747,8 @@ def get_daily_tracking(
             """,
             (str(guild_id), str(user_id)),
         )
-        conn.commit()
+        if should_close:
+            conn.commit()
 
         return {
             "guildId": str(guild_id),
@@ -803,7 +804,8 @@ def update_daily_tracking(
             """,
             values,
         )
-        conn.commit()
+        if should_close:
+            conn.commit()
     finally:
         if should_close:
             conn.close()
@@ -829,7 +831,7 @@ def check_daily_xp_limit(
     daily_limit = int(min(percent_cap, max_cap))
 
     # Reset daily counter if needed
-    now = datetime.utcnow()
+    now = utcnow()
     last_reset = tracking.get("last_xp_transfer_reset")
     if last_reset:
         last_reset_dt = datetime.fromisoformat(last_reset)
@@ -866,6 +868,6 @@ def record_xp_transfer(
     updates = {"daily_xp_transferred": current + xp_amount}
 
     if not tracking.get("last_xp_transfer_reset"):
-        updates["last_xp_transfer_reset"] = datetime.utcnow().isoformat()
+        updates["last_xp_transfer_reset"] = utcnow().isoformat()
 
     update_daily_tracking(guild_id, user_id, updates, conn)

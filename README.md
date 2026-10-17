@@ -5,8 +5,8 @@ A feature-rich bot built with Python and discord.py, compatible with both Discor
 ## Features
 
 ### 🤖 AI Integration
-- **AI Chat**: Ask questions to an AI assistant powered by Ollama
-- **Configurable Models**: Support for different AI models through Ollama
+- **AI Chat**: Ask questions to an AI assistant powered by Ollama or an OpenAI-compatible API (OpenRouter, OpenAI, Mistral, ...)
+- **Configurable Providers & Models**: Switch provider via `AI_PROVIDER` and choose the model
 - **Smart Responses**: AI responses formatted in beautiful Discord embeds
 
 ### 🎮 Mini-Games
@@ -30,6 +30,12 @@ A feature-rich bot built with Python and discord.py, compatible with both Discor
 - **Handle Support**: Add channels using either their channel ID or @handle (e.g., @el-dorado-community)
 - **Rich Embeds**: Beautiful announcements with thumbnails and video details
 
+### 🦋 Bluesky Integration
+- **Post Notifications**: Automatically announce new posts from a Bluesky account in a channel
+- **Account Management**: Add/remove watched accounts with custom notification channels and ping roles
+- **No API Key Required**: Uses the public Bluesky AppView API (read-only)
+- **Rich Embeds**: Post text, images/link cards and a direct link to the post
+
 ### 🔧 Administrative Tools
 - **Reload Command**: Hot-reload bot extensions without restarting
 - **Configuration Commands**: Set up mini-games and stream notifications
@@ -42,7 +48,7 @@ A feature-rich bot built with Python and discord.py, compatible with both Discor
   - Manual moderator intervention at 4+ warnings
 - **Mute Management**: Temporary mutes with automatic expiration
 - **User Appeals**: Allow users to appeal warnings with review system
-- **AI-Assisted Moderation**: Ollama-powered message flagging
+- **AI-Assisted Moderation**: AI-powered message flagging (Ollama or OpenAI-compatible provider)
   - Automatic detection of toxicity, spam, NSFW, harassment
   - Moderators make all final decisions
   - Conservative threshold to avoid false positives
@@ -72,11 +78,11 @@ For detailed GameVox migration instructions, see [GAMEVOX_MIGRATION.md](GAMEVOX_
 ## Installation
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.9+
 - Discord Bot Token
 - Twitch API credentials (for stream features)
 - YouTube Data API v3 key (for YouTube features)
-- Ollama server (for AI features)
+- An AI backend (for AI features): a local Ollama server **or** an API key for an OpenAI-compatible provider (OpenRouter, OpenAI, Mistral, ...)
 
 ### Setup
 
@@ -91,12 +97,7 @@ For detailed GameVox migration instructions, see [GAMEVOX_MIGRATION.md](GAMEVOX_
    pip install -r requirements.txt
    ```
 
-3. **Install FFmpeg** (required for music functionality)
-   - **Ubuntu/Debian**: `sudo apt install ffmpeg`
-   - **macOS**: `brew install ffmpeg`
-   - **Windows**: Download from [FFmpeg official site](https://ffmpeg.org/download.html)
-
-4. **Create environment file**
+3. **Create environment file**
    Create a `.env` file in the root directory with the following variables:
    ```env
    # Platform selection (discord or gamevox)
@@ -115,11 +116,20 @@ For detailed GameVox migration instructions, see [GAMEVOX_MIGRATION.md](GAMEVOX_
    twitch_client_id=YOUR_TWITCH_CLIENT_ID
    twitch_client_secret=YOUR_TWITCH_CLIENT_SECRET
    youtube_api_key=YOUR_YOUTUBE_API_KEY
+   # Optional: override the Bluesky public API endpoint (no key required)
+   bluesky_public_api=https://public.api.bsky.app
+   # AI provider: ollama (local) or openai (OpenAI-compatible API)
+   AI_PROVIDER=ollama
+   # Ollama (AI_PROVIDER=ollama)
    ollama_host=http://localhost:11434
    ollama_model=llama2
+   # OpenAI-compatible API (AI_PROVIDER=openai), e.g. OpenRouter
+   openai_base_url=https://openrouter.ai/api/v1
+   openai_api_key=YOUR_OPENAI_API_KEY
+   openai_model=openai/gpt-4o-mini
    ```
 
-5. **Run the bot**
+4. **Run the bot**
    ```bash
    python main.py
    ```
@@ -136,7 +146,7 @@ ISROBOT_python/
 ├── database.sqlite3        # SQLite database (auto-created)
 ├── discord.log             # Bot logs (auto-created)
 ├── commands/               # Bot command modules
-│   ├── ai.py               # AI chat integration with Ollama
+│   ├── ai.py               # AI chat integration (Ollama or OpenAI-compatible)
 │   ├── coinflip.py         # Coin flip command
 │   ├── count.py            # Counter game setup
 │   ├── moderation.py       # Moderation commands (warn, mute, etc.)
@@ -149,9 +159,11 @@ ISROBOT_python/
 │   ├── stream.py           # Twitch stream integration
 │   ├── xp_system.py        # XP and leveling system
 │   ├── xp_voice.py         # Voice XP tracking
+│   ├── bluesky.py          # Bluesky account integration
 │   └── youtube.py          # YouTube channel integration
 └── utils/                  # Utility modules
-    ├── ai_moderation.py    # AI message analysis with Ollama
+    ├── ai_provider.py      # AI provider abstraction (Ollama / OpenAI-compatible)
+    ├── ai_moderation.py    # AI message analysis
     └── moderation_utils.py # Moderation helper functions
 ```
 
@@ -215,6 +227,9 @@ All minigame commands must be run in the designated minigame channel (set by an 
 - `/stream_list` - List configured streamers and their status
 - `/youtube_add <channel_id_or_handle> <channel> [notify_videos] [notify_shorts] [ping_role]` - Add a YouTube channel to monitor (accepts channel ID or @handle)
 - `/youtube_remove <channel_name>` - Remove a YouTube channel from monitoring
+- `/bluesky_add <account> <channel> [ping_role]` - Add a Bluesky account to monitor (handle or DID)
+- `/bluesky_remove <account>` - Remove a Bluesky account from monitoring
+- `/bluesky_list` - List followed Bluesky accounts
 - `/reload` - Reload all bot extensions
 - `/feature_list` - Show enabled/disabled bot features from `.env`
 - `/feature_enable <feature>` - Enable a feature and update `.env`
@@ -233,7 +248,7 @@ All minigame commands must be run in the designated minigame channel (set by an 
 - `/modconfig view` - Display current moderation configuration
 - `/modconfig set <parameter> <value>` - Configure moderation settings
   - **Channels**: `log_channel`, `appeal_channel`, `ai_flag_channel`
-  - **AI Settings**: `ai_enabled`, `ai_confidence_threshold`, `ai_model`, `ollama_host`
+  - **AI Settings**: `ai_enabled`, `ai_confidence_threshold`, `ai_model`, `ollama_host` (the last two only apply when `AI_PROVIDER=ollama`; the provider itself is set globally in `.env`)
   - **Warning Decay**: `warn_1_decay_days`, `warn_2_decay_days`, `warn_3_decay_days`
   - **Mute Durations**: `mute_duration_2`, `mute_duration_3`
   - **Rules**: `rules_message_id`
@@ -257,6 +272,11 @@ The bot uses SQLite with the following tables:
 - Manages YouTube channels for notifications
 - Tracks last video/short IDs to prevent duplicates
 - Configurable notification types (videos, shorts)
+
+### Bluesky Accounts Table
+- Manages Bluesky accounts for notifications
+- Stores the handle, DID, display name, target channel and ping role
+- Tracks the last post URI/CID to prevent duplicate announcements
 
 ### Counter Game Table
 - Stores counter game configuration per server
@@ -328,8 +348,8 @@ Users must count sequentially starting from 1. Rules:
 - Rich embeds with stream thumbnails and details
 
 ### YouTube Notifications
-- Checks every 5 minutes for new content
-- Monitors videos, shorts, and live streams independently
+- Checks every 10 minutes for new content
+- Monitors videos and shorts independently
 - Flexible configuration to choose which content types to monitor
 - Supports both channel IDs and handles (e.g., @channel-name) for easy channel identification
 - Distinguishes between regular videos (>60 seconds) and shorts (≤60 seconds)
@@ -337,9 +357,18 @@ Users must count sequentially starting from 1. Rules:
 - Role mentions for notifications (optional)
 - Prevents duplicate notifications for the same content
 
+### Bluesky Notifications
+- Checks every 5 minutes for new posts via the public AppView API
+- No API key required (read-only public endpoints)
+- Ignores reposts and announces posts in chronological order
+- Initializes the last known post on add to avoid announcing old content
+- Rich embeds with post text, images/link-card previews and a direct link to the post
+- Role mentions for notifications (optional)
+- Checkpoint advances after each successful send to avoid duplicates on retry in case of transient failures
+
 ### AI Assistant
-- Powered by Ollama for local AI inference
-- Configurable AI models (default: llama2)
+- Powered by a local **Ollama** server or any **OpenAI-compatible API** (OpenRouter, OpenAI, Mistral, ...), selected with `AI_PROVIDER`
+- Configurable AI models (Ollama default: `llama2`; OpenAI-compatible default: `openai/gpt-4o-mini`)
 - Question length limit (500 characters) to prevent abuse
 - Response length limit (1024 characters) for Discord compatibility
 - Asynchronous processing to prevent bot blocking
@@ -459,7 +488,7 @@ The comprehensive moderation system provides advanced tools for server managemen
 ### AI-Assisted Moderation
 
 **How It Works:**
-1. Every message is analyzed by Ollama (if AI enabled)
+1. Every message is analyzed by the configured AI provider (Ollama or OpenAI-compatible) if AI enabled
 2. AI scores message 0-100 based on server rules
 3. Messages scoring above threshold are flagged
 4. Flags appear in moderation log with:
@@ -474,7 +503,7 @@ The comprehensive moderation system provides advanced tools for server managemen
 - ✅ AI never auto-mutes or bans users
 - ✅ Moderators must click button to take action
 - ✅ Conservative threshold to minimize false positives
-- ✅ System continues normally if Ollama unavailable
+- ✅ System continues normally if the AI provider is unavailable
 - ✅ Temperature set to 0.3 for consistent decisions
 
 **Risk Levels:**
@@ -512,7 +541,7 @@ The comprehensive moderation system provides advanced tools for server managemen
 - Adjust warning decay times per warn level
 - Customize automatic mute durations
 - Set AI confidence threshold (0-100)
-- Choose AI model and Ollama host
+- Choose AI provider (global) and model, and Ollama host (when `AI_PROVIDER=ollama`)
 - Configure all channels independently
 
 ### Moderation Log
@@ -537,7 +566,7 @@ All moderation actions are logged in the configured log channel with rich embeds
 ### Privacy & Data
 
 - All data stored locally in SQLite database
-- No external APIs except Ollama (runs locally)
+- No external APIs by default; if `AI_PROVIDER=openai`, message analysis is sent to the configured external provider
 - User messages analyzed only if AI enabled
 - Complete audit trail for transparency
 - Appeals and warnings are permanent record
@@ -549,7 +578,6 @@ The bot requires the following Python packages:
 - `python-dotenv>=1.0.0` - Environment variable management
 - `aiohttp>=3.8.0` - HTTP client for API requests
 - `PyNaCl>=1.5.0` - Voice functionality support
-- `ollama>=0.5.0` - Ollama AI integration
 
 ## Logging
 

@@ -24,6 +24,7 @@ from db_helpers import (
     spend_coins,
     spend_xp,
 )
+from utils.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -82,9 +83,7 @@ def create_trade_offer(
             )
 
         if sender["xp"] < xp:
-            raise ValueError(
-                f"Not enough XP: have {sender['xp']}, offering {xp}"
-            )
+            raise ValueError(f"Not enough XP: have {sender['xp']}, offering {xp}")
 
         # Check XP daily limit
         if xp > 0:
@@ -109,9 +108,7 @@ def create_trade_offer(
             (str(guild_id), str(from_user_id), str(to_user_id)),
         )
         if cursor.fetchone()[0] > 0:
-            raise ValueError(
-                "You already have a pending trade with this user"
-            )
+            raise ValueError("You already have a pending trade with this user")
 
         # Calculate tax preview
         tax_percent = settings.get("trade_tax_percent", 10.0)
@@ -134,7 +131,7 @@ def create_trade_offer(
                 xp,
                 tax_coins,
                 tax_xp,
-                datetime.utcnow().isoformat(),
+                utcnow().isoformat(),
             ),
         )
         trade_id = cursor.lastrowid
@@ -285,23 +282,54 @@ def accept_trade(
         if sender["coins"] < trade["coins"]:
             # Cancel trade - sender no longer has funds
             cursor.execute(
-                "UPDATE trades SET status = 'canceled' WHERE id = ?",
+                "UPDATE trades SET status = 'canceled' WHERE id = ? AND status = 'pending'",
                 (trade_id,),
             )
             conn.commit()
-            raise ValueError(
-                "Trade canceled: sender no longer has enough coins"
-            )
+            raise ValueError("Trade canceled: sender no longer has enough coins")
 
         if sender["xp"] < trade["xp"]:
             cursor.execute(
-                "UPDATE trades SET status = 'canceled' WHERE id = ?",
+                "UPDATE trades SET status = 'canceled' WHERE id = ? AND status = 'pending'",
                 (trade_id,),
             )
             conn.commit()
-            raise ValueError(
-                "Trade canceled: sender no longer has enough XP"
+            raise ValueError("Trade canceled: sender no longer has enough XP")
+
+        # Re-check that XP trading is still allowed and within the daily limit
+        if trade["xp"] > 0:
+            settings = get_guild_settings(guild_id, conn)
+            if not settings.get("xp_trading_enabled", 1):
+                raise ValueError("XP trading is disabled on this server")
+
+            can_transfer, current, limit = check_daily_xp_limit(
+                guild_id, trade["fromUserId"], trade["xp"], conn
             )
+            if not can_transfer:
+                remaining = max(limit - current, 0)
+                raise ValueError(
+                    f"Trade canceled: sender has reached the daily XP "
+                    f"transfer limit ({remaining} XP remaining)"
+                )
+
+        # Atomically move the trade to 'accepted' so it cannot be accepted
+        # twice (guards against concurrent/duplicate accepts).
+        escrow_release = utcnow() + timedelta(minutes=ESCROW_DURATION_MINUTES)
+
+        result = cursor.execute(
+            """
+            UPDATE trades
+            SET status = 'accepted', accepted_at = ?, escrow_release_at = ?
+            WHERE id = ? AND status = 'pending'
+            """,
+            (
+                utcnow().isoformat(),
+                escrow_release.isoformat(),
+                trade_id,
+            ),
+        )
+        if result.rowcount == 0:
+            raise ValueError("Trade is no longer pending")
 
         # Debit sender (into escrow)
         if trade["coins"] > 0:
@@ -325,24 +353,6 @@ def accept_trade(
                 related_type="trade",
                 conn=conn,
             )
-
-        # Set escrow release time
-        escrow_release = datetime.utcnow() + timedelta(
-            minutes=ESCROW_DURATION_MINUTES
-        )
-
-        cursor.execute(
-            """
-            UPDATE trades
-            SET status = 'accepted', accepted_at = ?, escrow_release_at = ?
-            WHERE id = ?
-            """,
-            (
-                datetime.utcnow().isoformat(),
-                escrow_release.isoformat(),
-                trade_id,
-            ),
-        )
 
         conn.commit()
 
@@ -394,12 +404,27 @@ def complete_trade(
             raise ValueError(f"Trade cannot be completed (status: {trade['status']})")
 
         # Check escrow period
+        if not trade["escrow_release_at"]:
+            raise ValueError("Trade has no escrow release time")
+
         escrow_release = datetime.fromisoformat(trade["escrow_release_at"])
-        if datetime.utcnow() < escrow_release:
-            remaining = (escrow_release - datetime.utcnow()).seconds
-            raise ValueError(
-                f"Escrow period not over. {remaining} seconds remaining."
-            )
+        now = utcnow()
+        if now < escrow_release:
+            remaining = int((escrow_release - now).total_seconds())
+            raise ValueError(f"Escrow period not over. {remaining} seconds remaining.")
+
+        # Atomically mark the trade completed so it cannot be completed (and
+        # the recipient credited) twice.
+        result = cursor.execute(
+            """
+            UPDATE trades
+            SET status = 'completed', completed_at = ?
+            WHERE id = ? AND status = 'accepted'
+            """,
+            (now.isoformat(), trade_id),
+        )
+        if result.rowcount == 0:
+            raise ValueError(f"Trade cannot be completed (status: {trade['status']})")
 
         guild_id = trade["guildId"]
         recipient_id = trade["toUserId"]
@@ -435,16 +460,6 @@ def complete_trade(
 
             # Record XP transfer against daily limit
             record_xp_transfer(guild_id, sender_id, trade["xp"], conn)
-
-        # Update trade status
-        cursor.execute(
-            """
-            UPDATE trades
-            SET status = 'completed', completed_at = ?
-            WHERE id = ?
-            """,
-            (datetime.utcnow().isoformat(), trade_id),
-        )
 
         conn.commit()
 
@@ -522,11 +537,19 @@ def cancel_trade(
         if trade["status"] == "accepted":
             # Only sender can cancel during escrow
             if not is_sender:
-                raise ValueError(
-                    "Only the sender can cancel during escrow period"
-                )
+                raise ValueError("Only the sender can cancel during escrow period")
 
-            # Refund sender
+        # Atomically transition to 'canceled' from the observed status so a
+        # concurrent completion cannot race with the refund below.
+        result = cursor.execute(
+            "UPDATE trades SET status = 'canceled' WHERE id = ? AND status = ?",
+            (trade_id, trade["status"]),
+        )
+        if result.rowcount == 0:
+            raise ValueError("Trade could not be canceled (status changed)")
+
+        # Refund sender (escrow) if the trade had already been accepted
+        if trade["status"] == "accepted":
             if trade["coins"] > 0:
                 add_coins(
                     guild_id,
@@ -548,12 +571,6 @@ def cancel_trade(
                     related_type="trade",
                     conn=conn,
                 )
-
-        # Update status
-        cursor.execute(
-            "UPDATE trades SET status = 'canceled' WHERE id = ?",
-            (trade_id,),
-        )
 
         conn.commit()
 
@@ -586,7 +603,7 @@ def check_and_complete_ready_trades(conn=None) -> list:
 
     cursor = conn.cursor()
     try:
-        now = datetime.utcnow().isoformat()
+        now = utcnow().isoformat()
 
         # Find trades ready for completion
         cursor.execute(
@@ -635,8 +652,6 @@ def get_xp_transfer_warning(
         "new_level": level_info["new_level"],
         "will_level_down": level_info["level_change"] < 0,
         "levels_lost": (
-            abs(level_info["level_change"])
-            if level_info["level_change"] < 0
-            else 0
+            abs(level_info["level_change"]) if level_info["level_change"] < 0 else 0
         ),
     }

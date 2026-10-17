@@ -12,6 +12,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from utils import moderation_utils
+from utils.i18n import get_locale, t, tr
 
 load_dotenv()
 
@@ -35,24 +36,22 @@ class ModerationContextMenu(commands.Cog):
         # Check permissions
         if not interaction.user.guild_permissions.moderate_members:
             await interaction.response.send_message(
-                "❌ Vous n'avez pas la permission d'avertir des utilisateurs.",
-                ephemeral=True
+                t("mod.ctx.no_perm", get_locale(interaction)),
+                ephemeral=True,
             )
             return
 
         # Can't warn bots
         if message.author.bot:
             await interaction.response.send_message(
-                "❌ Vous ne pouvez pas avertir un bot.",
-                ephemeral=True
+                t("mod.ctx.bot", get_locale(interaction)), ephemeral=True
             )
             return
 
         # Can't warn yourself
         if message.author.id == interaction.user.id:
             await interaction.response.send_message(
-                "❌ Vous ne pouvez pas vous avertir vous-même.",
-                ephemeral=True
+                t("mod.ctx.self", get_locale(interaction)), ephemeral=True
             )
             return
 
@@ -66,48 +65,55 @@ class ModerationContextMenu(commands.Cog):
         await interaction.response.send_modal(modal)
 
 
-class WarnModal(discord.ui.Modal, title="Avertir l'utilisateur"):
+class WarnModal(discord.ui.Modal):
     """Modal for warning a user with details."""
 
-    reason_select = discord.ui.Select(
-        placeholder="Sélectionnez une raison...",
-        options=[
-            discord.SelectOption(label="Spam", value="Spam", emoji="📢"),
-            discord.SelectOption(label="Toxicité", value="Toxicité", emoji="⚠️"),
-            discord.SelectOption(label="Insultes", value="Insultes", emoji="🤬"),
-            discord.SelectOption(label="NSFW", value="NSFW", emoji="🔞"),
-            discord.SelectOption(label="Violation des règles", value="Violation des règles", emoji="📋"),
-            discord.SelectOption(label="Autre", value="Autre", emoji="❓"),
-        ]
-    )
-
-    additional_notes = discord.ui.TextInput(
-        label="Notes additionnelles (optionnel)",
-        style=discord.TextStyle.paragraph,
-        placeholder="Ajoutez des détails supplémentaires...",
-        required=False,
-        max_length=500
-    )
-
     def __init__(self, message: discord.Message, current_warns: int, bot: commands.Bot):
-        super().__init__()
+        locale = None  # We'll infer from interaction in on_submit? Or pass locale
+        super().__init__(title=t("mod.modal.title"))
         self.message = message
         self.current_warns = current_warns
         self.bot = bot
+        self.locale = locale
 
-        # Add description showing current warns
-        self.title = f"Avertir {message.author.display_name} ({current_warns} avertissement{'s' if current_warns != 1 else ''})"
+        plural = "s" if current_warns != 1 else ""
+        self.title = t(
+            "mod.modal.heading",
+            user=message.author.display_name,
+            count=current_warns,
+            s=plural,
+        )
+
+        self.reason_input = discord.ui.TextInput(
+            label=t("mod.modal.reason_label"),
+            style=discord.TextStyle.short,
+            placeholder=t("mod.modal.reason_placeholder"),
+            required=True,
+            max_length=100,
+        )
+        self.additional_notes = discord.ui.TextInput(
+            label=t("mod.modal.notes_label"),
+            style=discord.TextStyle.paragraph,
+            placeholder=t("mod.modal.notes_placeholder"),
+            required=False,
+            max_length=500,
+        )
+        self.add_item(self.reason_input)
+        self.add_item(self.additional_notes)
 
     async def on_submit(self, interaction: discord.Interaction):
         """Handle modal submission."""
         await interaction.response.defer(ephemeral=True)
 
         try:
-            # Build reason from modal inputs
-            # Note: Since we can't add Select to Modal directly, we'll use a simplified approach
-            # Users will need to type the reason
-            reason = self.additional_notes.value or "Avertissement via menu contextuel"
+            reason = (self.reason_input.value or "").strip()
+            notes = (self.additional_notes.value or "").strip()
+            if notes:
+                reason = f"{reason} — {notes}" if reason else notes
+            if not reason:
+                reason = t("mod.ctx.default_reason")
 
+            locale = get_locale(interaction)
             guild_id = str(interaction.guild.id)
             user_id = str(self.message.author.id)
             moderator_id = str(interaction.user.id)
@@ -122,7 +128,7 @@ class WarnModal(discord.ui.Modal, title="Avertir l'utilisateur"):
 
             # Send DM to user
             dm_embed = moderation_utils.create_warning_embed(
-                reason, new_count, interaction.guild.name
+                reason, new_count, interaction.guild.name, locale=locale
             )
             dm_sent = await moderation_utils.send_dm_notification(
                 self.message.author, dm_embed
@@ -134,42 +140,68 @@ class WarnModal(discord.ui.Modal, title="Avertir l'utilisateur"):
                 # Apply 1-hour mute
                 duration = config.get("mute_duration_warn_2", 3600) if config else 3600
                 await self._apply_mute(
-                    interaction.guild, self.message.author, moderator_id,
-                    "Mute automatique - 2 avertissements", duration
+                    interaction.guild,
+                    self.message.author,
+                    moderator_id,
+                    t("mod.ctx.auto_mute_reason_2"),
+                    duration,
+                    is_auto=True,
                 )
-                action_taken = f"\n🔇 **Mute automatique:** {moderation_utils.format_duration(duration)}"
+                action_taken = t(
+                    "mod.ctx.action_auto_mute",
+                    duration=moderation_utils.format_duration(duration, locale),
+                )
 
                 # Send mute DM
                 mute_embed = moderation_utils.create_mute_embed(
-                    "Mute automatique - 2 avertissements", duration, interaction.guild.name
+                    t("mod.ctx.auto_mute_reason_2"),
+                    duration,
+                    interaction.guild.name,
+                    locale=locale,
                 )
-                await moderation_utils.send_dm_notification(self.message.author, mute_embed)
+                await moderation_utils.send_dm_notification(
+                    self.message.author, mute_embed
+                )
 
             elif new_count == 3:
                 # Apply 24-hour mute
-                duration = config.get("mute_duration_warn_3", 86400) if config else 86400
-                await self._apply_mute(
-                    interaction.guild, self.message.author, moderator_id,
-                    "Mute automatique - 3 avertissements", duration
+                duration = (
+                    config.get("mute_duration_warn_3", 86400) if config else 86400
                 )
-                action_taken = f"\n🔇 **Mute automatique:** {moderation_utils.format_duration(duration)}"
+                await self._apply_mute(
+                    interaction.guild,
+                    self.message.author,
+                    moderator_id,
+                    t("mod.ctx.auto_mute_reason_3"),
+                    duration,
+                    is_auto=True,
+                )
+                action_taken = t(
+                    "mod.ctx.action_auto_mute",
+                    duration=moderation_utils.format_duration(duration, locale),
+                )
 
                 # Send mute DM
                 mute_embed = moderation_utils.create_mute_embed(
-                    "Mute automatique - 3 avertissements", duration, interaction.guild.name
+                    t("mod.ctx.auto_mute_reason_3"),
+                    duration,
+                    interaction.guild.name,
+                    locale=locale,
                 )
-                await moderation_utils.send_dm_notification(self.message.author, mute_embed)
+                await moderation_utils.send_dm_notification(
+                    self.message.author, mute_embed
+                )
 
             elif new_count >= 4:
-                action_taken = "\n⚠️ **Attention:** 4+ avertissements - action manuelle requise."
+                action_taken = t("mod.ctx.action_warn4", locale)
 
             # Delete message if requested (we'll always delete for context menu)
             try:
                 await self.message.delete()
-                action_taken += "\n🗑️ Message supprimé"
+                action_taken += t("mod.ctx.action_msg_deleted", locale)
             except Exception as e:
                 logger.error(f"Erreur lors de la suppression du message: {e}")
-                action_taken += "\n⚠️ Impossible de supprimer le message"
+                action_taken += t("mod.ctx.action_msg_delete_failed", locale)
 
             # Post to modlog
             if config and config.get("log_channel_id"):
@@ -179,43 +211,55 @@ class WarnModal(discord.ui.Modal, title="Avertir l'utilisateur"):
                         "warn",
                         self.message.author,
                         interaction.user,
+                        locale=locale,
                         reason=reason,
                         warn_count=new_count,
-                        message_link=self.message.jump_url
+                        message_link=self.message.jump_url,
                     )
                     await channel.send(embed=log_embed)
 
             # Send response
-            dm_status = "✅ DM envoyé" if dm_sent else "⚠️ DM non envoyé"
+            dm_status = (
+                t("mod.ctx.dm_sent", locale)
+                if dm_sent
+                else t("mod.ctx.dm_not_sent", locale)
+            )
             await interaction.followup.send(
-                f"✅ **Avertissement émis** à {self.message.author.mention}\n"
-                f"**Raison:** {reason}\n"
-                f"**Avertissements totaux:** {new_count}\n"
-                f"{dm_status}{action_taken}",
-                ephemeral=True
+                t(
+                    "mod.ctx.warn_issued",
+                    locale,
+                    user=self.message.author.mention,
+                    reason=reason,
+                    count=new_count,
+                    dm=dm_status,
+                    action=action_taken,
+                ),
+                ephemeral=True,
             )
 
         except Exception as e:
             logger.error(f"Erreur lors de l'avertissement via menu contextuel: {e}")
             await interaction.followup.send(
-                "❌ Une erreur s'est produite.",
-                ephemeral=True
+                t("mod.ctx.error", get_locale(interaction)), ephemeral=True
             )
 
     async def _apply_mute(
-        self, guild: discord.Guild, user: discord.Member,
-        moderator_id: str, reason: str, duration_seconds: int
+        self,
+        guild: discord.Guild,
+        user: discord.Member,
+        moderator_id: str,
+        reason: str,
+        duration_seconds: int,
+        is_auto: bool = False,
     ):
         """Apply a mute to a user."""
-        from datetime import datetime, timedelta, timezone
-
-        # Use Discord's timeout feature
-        timeout_until = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
-        await user.timeout(timeout_until, reason=reason)
-
-        # Store in database
-        moderation_utils.add_mute(
-            str(guild.id), str(user.id), moderator_id, reason, duration_seconds
+        await moderation_utils.apply_mute(
+            guild,
+            user,
+            moderator_id,
+            reason,
+            duration_seconds,
+            is_auto=is_auto,
         )
 
 

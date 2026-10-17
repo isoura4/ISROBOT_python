@@ -123,11 +123,13 @@ def mock_db_connection(test_db):
         conn.row_factory = sqlite3.Row
         return conn
 
-    with patch("db_helpers.get_db_connection", patched_get_db), \
-         patch("minigame_engine.get_db_connection", patched_get_db), \
-         patch("quests.get_db_connection", patched_get_db), \
-         patch("trades.get_db_connection", patched_get_db), \
-         patch("shop.get_db_connection", patched_get_db):
+    with (
+        patch("db_helpers.get_db_connection", patched_get_db),
+        patch("minigame_engine.get_db_connection", patched_get_db),
+        patch("quests.get_db_connection", patched_get_db),
+        patch("trades.get_db_connection", patched_get_db),
+        patch("shop.get_db_connection", patched_get_db),
+    ):
         yield patched_get_db
 
 
@@ -513,9 +515,7 @@ class TestCooldowns:
         set_cooldown("guild1", "user1", "capture")
 
         # Check immediately - should be on cooldown
-        on_cooldown, remaining = check_cooldown(
-            "guild1", "user1", "capture", 60
-        )
+        on_cooldown, remaining = check_cooldown("guild1", "user1", "capture", 60)
         assert on_cooldown is True
         assert remaining > 0
 
@@ -525,9 +525,7 @@ class TestCooldowns:
         set_cooldown("guild1", "user1", "capture")
 
         # Check with 0 second cooldown - should not be on cooldown
-        on_cooldown, remaining = check_cooldown(
-            "guild1", "user1", "capture", 0
-        )
+        on_cooldown, remaining = check_cooldown("guild1", "user1", "capture", 0)
         assert on_cooldown is False
         assert remaining == 0
 

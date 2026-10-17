@@ -13,6 +13,7 @@ from datetime import datetime
 
 from database import get_db_connection
 from db_helpers import add_coins, add_xp, get_daily_tracking
+from utils.time_utils import utcnow
 
 
 def get_available_quests(
@@ -82,7 +83,7 @@ def get_user_daily_quests(
     cursor = conn.cursor()
     try:
         # Get quests assigned today
-        today = datetime.utcnow().date().isoformat()
+        today = utcnow().date().isoformat()
 
         cursor.execute(
             """
@@ -162,25 +163,41 @@ def assign_daily_quests(
                 quest["completed"] = 0
                 assigned.append(quest)
 
-        # Potentially assign random bonus quests (50% chance each)
-        remaining_quests = [q for q in daily_quests if q not in assigned]
-        for _ in range(num_random):
-            if remaining_quests and random.random() < 0.5:
-                quest = random.choice(remaining_quests)
-                remaining_quests.remove(quest)
+        # Potentially assign random bonus quests (50% chance each). These come
+        # from the "random" pool (capture/duel/shop...) rather than the daily
+        # pool, and are only assigned when the user has no active random quest.
+        if num_random > 0:
+            cursor.execute(
+                """
+                SELECT COUNT(*) FROM user_quests uq
+                JOIN quests q ON uq.questId = q.id
+                WHERE uq.guildId = ? AND uq.userId = ?
+                  AND q.type = 'random' AND uq.claimed = 0
+                """,
+                (str(guild_id), str(user_id)),
+            )
+            has_active_random = cursor.fetchone()[0] > 0
 
-                cursor.execute(
-                    """
-                    INSERT INTO user_quests (
-                        guildId, userId, questId, progress, completed, claimed
-                    ) VALUES (?, ?, ?, 0, 0, 0)
-                    """,
-                    (str(guild_id), str(user_id), quest["id"]),
-                )
-                quest["user_quest_id"] = cursor.lastrowid
-                quest["progress"] = 0
-                quest["completed"] = 0
-                assigned.append(quest)
+            random_pool = (
+                get_available_quests("random", conn) if not has_active_random else []
+            )
+            for _ in range(num_random):
+                if random_pool and random.random() < 0.5:
+                    quest = random.choice(random_pool)
+                    random_pool.remove(quest)
+
+                    cursor.execute(
+                        """
+                        INSERT INTO user_quests (
+                            guildId, userId, questId, progress, completed, claimed
+                        ) VALUES (?, ?, ?, 0, 0, 0)
+                        """,
+                        (str(guild_id), str(user_id), quest["id"]),
+                    )
+                    quest["user_quest_id"] = cursor.lastrowid
+                    quest["progress"] = 0
+                    quest["completed"] = 0
+                    assigned.append(quest)
 
         conn.commit()
         return assigned
@@ -250,14 +267,16 @@ def increment_quest_progress(
                     SET progress = ?, completed = 1, completed_at = ?
                     WHERE id = ?
                     """,
-                    (new_progress, datetime.utcnow().isoformat(), quest_id),
+                    (new_progress, utcnow().isoformat(), quest_id),
                 )
-                completed_quests.append({
-                    "id": quest_id,
-                    "name": quest_name,
-                    "progress": new_progress,
-                    "target": target_value,
-                })
+                completed_quests.append(
+                    {
+                        "id": quest_id,
+                        "name": quest_name,
+                        "progress": new_progress,
+                        "target": target_value,
+                    }
+                )
             else:
                 cursor.execute(
                     "UPDATE user_quests SET progress = ? WHERE id = ?",
@@ -442,7 +461,7 @@ def get_daily_status(
         can_claim_new = True
         if last_claim:
             last_claim_date = datetime.fromisoformat(last_claim).date()
-            today = datetime.utcnow().date()
+            today = utcnow().date()
             can_claim_new = last_claim_date < today
 
         # Count completed/total
@@ -485,7 +504,7 @@ def update_streak(
 
         last_claim = tracking.get("last_daily_claim")
         current_streak = tracking.get("streak", 0)
-        now = datetime.utcnow()
+        now = utcnow()
         today = now.date()
 
         new_streak = 1  # Default: reset to 1

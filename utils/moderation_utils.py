@@ -3,6 +3,7 @@ Utility functions for the moderation system.
 Handles database operations, notifications, and helper functions.
 """
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -10,6 +11,8 @@ from typing import Optional
 import discord
 
 import database
+from utils.i18n import t
+from utils.security_fixes import escape_user_content
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,39 @@ def get_warning_count(guild_id: str, user_id: str) -> int:
         conn.close()
 
 
+def get_oldest_active_warning_at(
+    guild_id: str, user_id: str, warn_count: int, conn=None
+) -> Optional[datetime]:
+    """
+    Return the issue time of the oldest currently active warning.
+
+    Since only the oldest warning decays on each cycle, the active warnings
+    are the most recent ``warn_count`` 'warn_issued' events logged in the
+    history. Returns None if it cannot be determined.
+    """
+    should_close = conn is None
+    if conn is None:
+        conn = database.get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT created_at FROM warning_history
+            WHERE guild_id = ? AND user_id = ? AND action = 'warn_issued'
+            ORDER BY created_at DESC
+            LIMIT 1 OFFSET ?
+            """,
+            (guild_id, user_id, max(warn_count - 1, 0)),
+        )
+        row = cursor.fetchone()
+        if not row or not row["created_at"]:
+            return None
+        return datetime.fromisoformat(row["created_at"])
+    finally:
+        if should_close:
+            conn.close()
+
+
 def increment_warning(
     guild_id: str, user_id: str, moderator_id: str, reason: str
 ) -> int:
@@ -44,14 +80,21 @@ def increment_warning(
         cursor = conn.cursor()
         now = datetime.now(timezone.utc).isoformat()
 
-        # Get current count
+        # Get current count and oldest-warning timestamp
         cursor.execute(
-            "SELECT warn_count FROM warnings WHERE guild_id = ? AND user_id = ?",
+            "SELECT warn_count, updated_at FROM warnings WHERE guild_id = ? AND user_id = ?",
             (guild_id, user_id),
         )
         result = cursor.fetchone()
         old_count = result["warn_count"] if result else 0
         new_count = old_count + 1
+
+        # `updated_at` tracks the OLDEST active warning so each warning decays
+        # based on its own age (MODERATION.md: "only the oldest warning decays
+        # per cycle"). Only set it when this becomes the first active warning;
+        # otherwise keep the existing oldest timestamp so that issuing a new
+        # warning does not postpone the decay of older ones.
+        oldest_at = now if old_count == 0 else result["updated_at"]
 
         # Update or insert warning record
         cursor.execute(
@@ -62,7 +105,7 @@ def increment_warning(
                 warn_count = ?,
                 updated_at = ?
         """,
-            (guild_id, user_id, new_count, now, now, new_count, now),
+            (guild_id, user_id, new_count, now, oldest_at, new_count, oldest_at),
         )
 
         # Log to history
@@ -106,6 +149,15 @@ def decrement_warning(
         old_count = result["warn_count"]
         new_count = max(0, old_count - 1)
 
+        # Advance the decay clock to the new oldest active warning instead of
+        # resetting it to "now". This keeps each warning's decay tied to its
+        # own issue time (MODERATION.md: "only the oldest warning decays").
+        if new_count == 0:
+            oldest_at = now
+        else:
+            oldest_dt = get_oldest_active_warning_at(guild_id, user_id, new_count, conn)
+            oldest_at = oldest_dt.isoformat() if oldest_dt else now
+
         # Update warning record
         cursor.execute(
             """
@@ -113,7 +165,7 @@ def decrement_warning(
             SET warn_count = ?, updated_at = ?
             WHERE guild_id = ? AND user_id = ?
         """,
-            (new_count, now, guild_id, user_id),
+            (new_count, oldest_at, guild_id, user_id),
         )
 
         # Log to history
@@ -136,12 +188,12 @@ def decrement_warning(
 def get_warning_history(guild_id: str, user_id: str, limit: int = 100) -> list:
     """
     Get warning history for a user.
-    
+
     Args:
         guild_id: The guild ID
         user_id: The user ID
         limit: Maximum number of entries to return (default 100)
-    
+
     Returns:
         List of warning history entries, most recent first
     """
@@ -168,8 +220,15 @@ def add_mute(
     moderator_id: Optional[str],
     reason: str,
     duration_seconds: int,
+    is_auto: bool = False,
 ) -> None:
-    """Add an active mute record."""
+    """Add an active mute record.
+
+    Args:
+        is_auto: True when the mute was applied automatically (e.g. warning
+            escalation), False for manual moderator mutes. Automatic mutes are
+            the only ones removed when warnings decay to zero.
+    """
     conn = database.get_db_connection()
     try:
         cursor = conn.cursor()
@@ -179,13 +238,14 @@ def add_mute(
         cursor.execute(
             """
             INSERT INTO active_mutes 
-            (guild_id, user_id, moderator_id, reason, expires_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (guild_id, user_id, moderator_id, reason, expires_at, created_at, is_auto)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(guild_id, user_id) DO UPDATE SET
                 moderator_id = ?,
                 reason = ?,
                 expires_at = ?,
-                created_at = ?
+                created_at = ?,
+                is_auto = ?
         """,
             (
                 guild_id,
@@ -194,10 +254,12 @@ def add_mute(
                 reason,
                 expires_at.isoformat(),
                 now.isoformat(),
+                1 if is_auto else 0,
                 moderator_id,
                 reason,
                 expires_at.isoformat(),
                 now.isoformat(),
+                1 if is_auto else 0,
             ),
         )
 
@@ -306,16 +368,25 @@ def set_moderation_config(guild_id: str, parameter: str, value: str) -> None:
     """Set a moderation configuration parameter for a guild."""
     # Allowlist of valid column names
     valid_columns = {
-        "log_channel_id", "appeal_channel_id", "ai_enabled", 
-        "ai_confidence_threshold", "ai_flag_channel_id", "ai_model", 
-        "ollama_host", "decay_multiplier", "warn_1_decay_days", 
-        "warn_2_decay_days", "warn_3_decay_days", "mute_duration_warn_2", 
-        "mute_duration_warn_3", "rules_message_id"
+        "log_channel_id",
+        "appeal_channel_id",
+        "ai_enabled",
+        "ai_confidence_threshold",
+        "ai_flag_channel_id",
+        "ai_model",
+        "ollama_host",
+        "decay_multiplier",
+        "warn_1_decay_days",
+        "warn_2_decay_days",
+        "warn_3_decay_days",
+        "mute_duration_warn_2",
+        "mute_duration_warn_3",
+        "rules_message_id",
     }
-    
+
     if parameter not in valid_columns:
         raise ValueError(f"Invalid parameter: {parameter}")
-    
+
     conn = database.get_db_connection()
     try:
         cursor = conn.cursor()
@@ -398,9 +469,7 @@ def get_users_for_decay() -> list:
         conn.close()
 
 
-def create_appeal(
-    guild_id: str, user_id: str, appeal_reason: str
-) -> Optional[int]:
+def create_appeal(guild_id: str, user_id: str, appeal_reason: str) -> Optional[int]:
     """
     Create a new appeal for a user.
     Returns the appeal ID if successful, None if user has no warnings
@@ -495,14 +564,14 @@ def check_appeal_cooldown(guild_id: str, user_id: str) -> Optional[timedelta]:
             (guild_id, user_id),
         )
         result = cursor.fetchone()
-        
+
         if not result:
             return None
-        
+
         last_appeal = datetime.fromisoformat(result["created_at"])
         time_since = datetime.now(timezone.utc) - last_appeal
         cooldown = timedelta(hours=48)
-        
+
         if time_since < cooldown:
             return cooldown - time_since
         return None
@@ -564,9 +633,7 @@ def review_appeal(
 # --- Notification Functions ---
 
 
-async def send_dm_notification(
-    user: discord.Member, embed: discord.Embed
-) -> bool:
+async def send_dm_notification(user: discord.Member, embed: discord.Embed) -> bool:
     """
     Send a DM notification to a user.
     Returns True if successful, False if DMs are disabled.
@@ -583,85 +650,111 @@ async def send_dm_notification(
 
 
 def create_warning_embed(
-    reason: str, warn_count: int, guild_name: str, rules_link: Optional[str] = None
+    reason: str,
+    warn_count: int,
+    guild_name: str,
+    rules_link: Optional[str] = None,
+    locale: Optional[str] = None,
 ) -> discord.Embed:
     """Create an embed for a warning notification."""
     embed = discord.Embed(
-        title="⚠️ Avertissement reçu",
-        description=f"Vous avez reçu un avertissement sur **{guild_name}**.",
+        title=t("mod.warn.title", locale),
+        description=t("mod.warn.desc", locale, guild=guild_name),
         color=discord.Color.orange(),
         timestamp=datetime.now(timezone.utc),
     )
-    embed.add_field(name="Raison", value=reason, inline=False)
-    embed.add_field(name="Nombre d'avertissements", value=str(warn_count), inline=True)
+    embed.add_field(
+        name=t("mod.field.reason", locale),
+        value=escape_user_content(reason),
+        inline=False,
+    )
+    embed.add_field(
+        name=t("mod.field.warn_count", locale), value=str(warn_count), inline=True
+    )
 
     if rules_link:
         embed.add_field(
-            name="Règles du serveur", value=f"[Cliquez ici]({rules_link})", inline=False
+            name=t("mod.field.rules", locale),
+            value=t("mod.field.rules_link", locale, link=rules_link),
+            inline=False,
         )
 
     embed.add_field(
-        name="📝 Faire appel",
-        value="Vous pouvez faire appel de cet avertissement en utilisant "
-        "la commande `/appeal` avec votre raison.",
+        name=t("mod.field.appeal", locale),
+        value=t("mod.field.appeal_value", locale),
         inline=False,
     )
 
-    embed.set_footer(text="Système de modération ISROBOT")
+    embed.set_footer(text=t("mod.footer", locale))
     return embed
 
 
 def create_mute_embed(
-    reason: str, duration_seconds: int, guild_name: str
+    reason: str,
+    duration_seconds: int,
+    guild_name: str,
+    locale: Optional[str] = None,
 ) -> discord.Embed:
     """Create an embed for a mute notification."""
-    duration_str = format_duration(duration_seconds)
+    duration_str = format_duration(duration_seconds, locale)
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
 
     embed = discord.Embed(
-        title="🔇 Vous avez été muté",
-        description=f"Vous avez été muté sur **{guild_name}**.",
+        title=t("mod.mute.title", locale),
+        description=t("mod.mute.desc", locale, guild=guild_name),
         color=discord.Color.red(),
         timestamp=datetime.now(timezone.utc),
     )
-    embed.add_field(name="Raison", value=reason, inline=False)
-    embed.add_field(name="Durée", value=duration_str, inline=True)
     embed.add_field(
-        name="Expire",
+        name=t("mod.field.reason", locale),
+        value=escape_user_content(reason),
+        inline=False,
+    )
+    embed.add_field(
+        name=t("mod.field.duration", locale), value=duration_str, inline=True
+    )
+    embed.add_field(
+        name=t("mod.field.expires", locale),
         value=f"<t:{int(expires_at.timestamp())}:R>",
         inline=True,
     )
 
-    embed.set_footer(text="Système de modération ISROBOT")
+    embed.set_footer(text=t("mod.footer", locale))
     return embed
 
 
 def create_decay_embed(
-    new_warn_count: int, guild_name: str
+    new_warn_count: int, guild_name: str, locale: Optional[str] = None
 ) -> discord.Embed:
     """Create an embed for a warning decay notification."""
     embed = discord.Embed(
-        title="✅ Avertissement expiré",
-        description=f"Un de vos avertissements sur **{guild_name}** a expiré.",
+        title=t("mod.decay.title", locale),
+        description=t("mod.decay.desc", locale, guild=guild_name),
         color=discord.Color.green(),
         timestamp=datetime.now(timezone.utc),
     )
     embed.add_field(
-        name="Nouveaux avertissements", value=str(new_warn_count), inline=True
+        name=t("mod.decay.field_new", locale),
+        value=str(new_warn_count),
+        inline=True,
     )
 
     embed.add_field(
-        name="Continuez ainsi !",
-        value="Continuez à respecter les règles du serveur.",
+        name=t("mod.decay.field_keep", locale),
+        value=t("mod.decay.keep_value", locale),
         inline=False,
     )
 
-    embed.set_footer(text="Système de modération ISROBOT")
+    embed.set_footer(text=t("mod.footer", locale))
     return embed
 
 
 def create_modlog_embed(
-    action: str, user: discord.Member, moderator: Optional[discord.Member], **kwargs
+    action: str,
+    user: discord.Member,
+    moderator: Optional[discord.Member],
+    locale: Optional[str] = None,
+    **kwargs,
 ) -> discord.Embed:
     """Create an embed for moderation log entries."""
     color_map = {
@@ -675,55 +768,81 @@ def create_modlog_embed(
         "appeal_denied": discord.Color.red(),
     }
 
-    title_map = {
-        "warn": "⚠️ Avertissement émis",
-        "unwarn": "✅ Avertissement retiré",
-        "mute": "🔇 Utilisateur muté",
-        "unmute": "🔊 Utilisateur démuté",
-        "decay": "⏰ Avertissement expiré",
-        "appeal_created": "📝 Appel créé",
-        "appeal_approved": "✅ Appel approuvé",
-        "appeal_denied": "❌ Appel refusé",
+    title_keys = {
+        "warn": "mod.log.warn",
+        "unwarn": "mod.log.unwarn",
+        "mute": "mod.log.mute",
+        "unmute": "mod.log.unmute",
+        "decay": "mod.log.decay",
+        "appeal_created": "mod.log.appeal_created",
+        "appeal_approved": "mod.log.appeal_approved",
+        "appeal_denied": "mod.log.appeal_denied",
     }
 
+    title_key = title_keys.get(action)
+
     embed = discord.Embed(
-        title=title_map.get(action, "📋 Action de modération"),
+        title=t(title_key, locale) if title_key else t("mod.log.default", locale),
         color=color_map.get(action, discord.Color.blue()),
         timestamp=datetime.now(timezone.utc),
     )
 
-    embed.add_field(name="Utilisateur", value=user.mention, inline=True)
+    embed.add_field(
+        name=t("mod.log.field_user", locale), value=user.mention, inline=True
+    )
 
     if moderator:
-        embed.add_field(name="Modérateur", value=moderator.mention, inline=True)
+        embed.add_field(
+            name=t("mod.log.field_moderator", locale),
+            value=moderator.mention,
+            inline=True,
+        )
     else:
-        embed.add_field(name="Action", value="Automatique", inline=True)
+        embed.add_field(
+            name=t("mod.log.field_action", locale),
+            value=t("mod.log.auto", locale),
+            inline=True,
+        )
 
     # Add additional fields from kwargs
+    field_keys = {
+        "reason": "mod.log.field_reason",
+        "warn_count": "mod.log.field_warn_count",
+        "message_link": "mod.log.field_message_link",
+    }
     for key, value in kwargs.items():
-        formatted_key = key.replace("_", " ").title()
+        if value is None:
+            continue
+        if key in field_keys:
+            formatted_key = t(field_keys[key], locale)
+        else:
+            formatted_key = key.replace("_", " ").title()
         embed.add_field(name=formatted_key, value=str(value), inline=False)
 
-    embed.set_footer(text="Système de modération ISROBOT")
+    embed.set_footer(text=t("mod.footer", locale))
     return embed
 
 
 # --- Utility Functions ---
 
 
-def format_duration(seconds: int) -> str:
+def format_duration(seconds: int, locale: Optional[str] = None) -> str:
     """Format duration in seconds to human-readable string."""
     if seconds < 60:
-        return f"{seconds} seconde{'s' if seconds != 1 else ''}"
+        key = "mod.duration.sec" if seconds == 1 else "mod.duration.secs"
+        return t(key, locale, n=seconds)
     elif seconds < 3600:
         minutes = seconds // 60
-        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+        key = "mod.duration.min" if minutes == 1 else "mod.duration.mins"
+        return t(key, locale, n=minutes)
     elif seconds < 86400:
         hours = seconds // 3600
-        return f"{hours} heure{'s' if hours != 1 else ''}"
+        key = "mod.duration.hour" if hours == 1 else "mod.duration.hours"
+        return t(key, locale, n=hours)
     else:
         days = seconds // 86400
-        return f"{days} jour{'s' if days != 1 else ''}"
+        key = "mod.duration.day" if days == 1 else "mod.duration.days"
+        return t(key, locale, n=days)
 
 
 def parse_duration(duration_str: str) -> Optional[int]:
@@ -757,3 +876,24 @@ def parse_duration(duration_str: str) -> Optional[int]:
         total_seconds += int(seconds_match.group(1))
 
     return total_seconds if total_seconds > 0 else None
+
+
+async def apply_mute(
+    guild: discord.Guild,
+    user: discord.Member,
+    moderator_id: str,
+    reason: str,
+    duration_seconds: int,
+    is_auto: bool = False,
+) -> None:
+    """Apply a mute to a user via Discord timeout and persist in database."""
+    timeout_until = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
+    await user.timeout(timeout_until, reason=reason)
+    add_mute(
+        str(guild.id),
+        str(user.id),
+        moderator_id,
+        reason,
+        duration_seconds,
+        is_auto=is_auto,
+    )

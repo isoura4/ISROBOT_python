@@ -1,4 +1,4 @@
-import math
+import asyncio
 import os
 import random
 from typing import Dict, Optional, Tuple, Union
@@ -8,6 +8,7 @@ from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
 from utils.logging_config import get_logger
+from utils.xp import calculate_level_from_xp
 
 # Chargement du fichier .env
 load_dotenv()
@@ -19,7 +20,6 @@ logger = get_logger(__name__)
 SERVER_ID = int(os.getenv("server_id", "0"))
 
 # Configuration du système d'XP
-LEVEL_MULTIPLIER = 125  # Doit matcher xp_system.py
 VOICE_XP_MIN = 15  # XP min par heure en vocal
 VOICE_XP_MAX = 25  # XP max par heure en vocal
 
@@ -48,7 +48,7 @@ class VoiceXP(commands.Cog):
         return get_db_connection()
 
     def calculate_level_from_xp(self, xp: float) -> int:
-        return int(math.sqrt(xp / LEVEL_MULTIPLIER)) + 1
+        return calculate_level_from_xp(xp)
 
     def add_voice_xp(self, guild_id: int, user_id: int, xp_gain: int):
         """Ajoute de l'XP de voix sans incrémenter le compteur de messages."""
@@ -85,8 +85,8 @@ class VoiceXP(commands.Cog):
             messages = 0
             cursor.execute(
                 """
-                INSERT INTO users (guildId, userId, xp, level, messages, coins, corners)
-                VALUES (?, ?, ?, ?, ?, 0, 0)
+                INSERT INTO users (guildId, userId, xp, level, messages, coins)
+                VALUES (?, ?, ?, ?, ?, 0)
                 """,
                 (str(guild_id), str(user_id), new_xp, new_level, messages),
             )
@@ -182,7 +182,9 @@ class VoiceXP(commands.Cog):
                 xp_per_hour = random.randint(VOICE_XP_MIN, VOICE_XP_MAX)
                 total_xp = xp_per_hour * full_hours
                 try:
-                    self.add_voice_xp(guild_id, user_id, total_xp)
+                    await asyncio.to_thread(
+                        self.add_voice_xp, guild_id, user_id, total_xp
+                    )
                 except Exception as e:
                     logger.error(
                         f"Erreur lors de l'attribution d'XP vocal à {user_id} sur {guild_id}: {e}"

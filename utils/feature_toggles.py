@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv, set_key
 
+from utils.i18n import t
+
 
 def _parse_bool_env(value: Optional[str], default: bool = True) -> bool:
     if value is None:
@@ -68,6 +70,10 @@ FEATURES: Dict[str, Dict[str, str]] = {
         "module": "commands.youtube",
         "label": "YouTube",
     },
+    "bluesky": {
+        "module": "commands.bluesky",
+        "label": "Bluesky",
+    },
 }
 
 _MODULE_TO_FEATURE = {data["module"]: key for key, data in FEATURES.items()}
@@ -81,11 +87,20 @@ def module_to_feature_key(module_name: str) -> Optional[str]:
     return _MODULE_TO_FEATURE.get(module_name)
 
 
-def module_label(module_name: str) -> str:
+def module_label(module_name: str, locale: Optional[str] = None) -> str:
     feature_key = module_to_feature_key(module_name)
     if feature_key is None:
         return module_name
-    return FEATURES[feature_key]["label"]
+    return feature_label(feature_key, locale)
+
+
+def feature_label(feature_key: str, locale: Optional[str] = None) -> str:
+    """Retourne le libellé localisé d'une fonctionnalité."""
+    key = f"feature.{feature_key}"
+    label = t(key, locale)
+    if label == key and feature_key in FEATURES:
+        return FEATURES[feature_key]["label"]
+    return label
 
 
 def feature_status(feature_key: str) -> bool:
@@ -114,10 +129,12 @@ def is_module_enabled(module_name: str) -> bool:
     return feature_status(feature_key)
 
 
-def get_feature_rows() -> List[Tuple[str, str, bool, str]]:
+def get_feature_rows(locale: Optional[str] = None) -> List[Tuple[str, str, bool, str]]:
     rows: List[Tuple[str, str, bool, str]] = []
     for key, data in FEATURES.items():
-        rows.append((key, data["label"], feature_status(key), feature_env_key(key)))
+        rows.append(
+            (key, feature_label(key, locale), feature_status(key), feature_env_key(key))
+        )
     return rows
 
 

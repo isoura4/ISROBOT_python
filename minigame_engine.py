@@ -20,6 +20,24 @@ from db_helpers import (
     spend_coins,
 )
 
+# Multiplier applied to the fair payout cap (1 / odds) so the house keeps a
+# small edge and the capture game is not a net source of coins over time.
+CAPTURE_HOUSE_EDGE = 0.95
+
+# Paramètres d'équilibrage du jeu de capture (externalisés en constantes).
+CAPTURE_BASE_ODDS = 0.30
+CAPTURE_XP_BONUS_PER_LEVEL = 0.01
+CAPTURE_XP_BONUS_MAX = 0.20
+CAPTURE_STAKE_BONUS_PER_COIN = 0.0003
+CAPTURE_STAKE_BONUS_MAX = 0.15
+CAPTURE_STAKE_CAP = 500
+CAPTURE_MAX_ODDS = 0.65
+
+# Paramètres d'équilibrage du duel d'arène.
+DUEL_BASE_ODDS = 0.50
+DUEL_ODDS_SHIFT_PER_LEVEL = 0.02
+DUEL_ODDS_SHIFT_MAX = 0.20
+
 
 def calculate_capture_odds(user_xp: float, stake_coins: float) -> float:
     """
@@ -34,18 +52,20 @@ def calculate_capture_odds(user_xp: float, stake_coins: float) -> float:
     level = calculate_level_from_xp(user_xp)
 
     # Base odds
-    base_odds = 0.30
+    base_odds = CAPTURE_BASE_ODDS
 
     # XP bonus (1% per level, max 20%)
-    xp_bonus = min(level * 0.01, 0.20)
+    xp_bonus = min(level * CAPTURE_XP_BONUS_PER_LEVEL, CAPTURE_XP_BONUS_MAX)
 
     # Stake bonus (higher stake = better odds, diminishing returns)
     # 0.03% per coin up to 500 coins = 15%
-    stake_bonus = min(stake_coins * 0.0003, 0.15)
+    stake_bonus = min(
+        stake_coins * CAPTURE_STAKE_BONUS_PER_COIN, CAPTURE_STAKE_BONUS_MAX
+    )
 
     total_odds = base_odds + xp_bonus + stake_bonus
 
-    return min(total_odds, 0.65)
+    return min(total_odds, CAPTURE_MAX_ODDS)
 
 
 def capture_attempt(
@@ -107,8 +127,17 @@ def capture_attempt(
         set_cooldown(guild_id, user_id, "capture", conn)
 
         if success:
-            # Success: Win 2x stake + bonus based on odds
-            multiplier = 2.0 + (1 - total_odds)  # Lower odds = higher multiplier
+            # Success: base payout of 2x stake plus a bonus that grows as the
+            # odds get lower. To keep the game from being a money printer, the
+            # total multiplier is capped so the expected value stays <= 0.
+            #
+            # With a total multiplier M, EV = stake * (odds * (M - 1) - (1 - odds)).
+            # EV <= 0 requires M <= 1 / odds. We apply a small house edge so the
+            # economy deflates on average regardless of the player's odds.
+            fair_multiplier_cap = (1.0 / total_odds) * CAPTURE_HOUSE_EDGE
+            multiplier = min(
+                2.0 + (1 - total_odds), fair_multiplier_cap
+            )  # Lower odds = higher multiplier
             winnings = int(stake_coins * multiplier)
             xp_gain = int(stake_coins * 0.1)  # 10% of stake as XP
 
@@ -199,17 +228,17 @@ def calculate_duel_odds(user1_xp: float, user2_xp: float) -> tuple[float, float]
     level_diff = level1 - level2
 
     # Each level difference = 2% odds shift, max 20%
-    odds_shift = min(abs(level_diff) * 0.02, 0.20)
+    odds_shift = min(abs(level_diff) * DUEL_ODDS_SHIFT_PER_LEVEL, DUEL_ODDS_SHIFT_MAX)
 
     if level_diff > 0:
-        user1_odds = 0.50 + odds_shift
-        user2_odds = 0.50 - odds_shift
+        user1_odds = DUEL_BASE_ODDS + odds_shift
+        user2_odds = DUEL_BASE_ODDS - odds_shift
     elif level_diff < 0:
-        user1_odds = 0.50 - odds_shift
-        user2_odds = 0.50 + odds_shift
+        user1_odds = DUEL_BASE_ODDS - odds_shift
+        user2_odds = DUEL_BASE_ODDS + odds_shift
     else:
-        user1_odds = 0.50
-        user2_odds = 0.50
+        user1_odds = DUEL_BASE_ODDS
+        user2_odds = DUEL_BASE_ODDS
 
     return user1_odds, user2_odds
 
@@ -322,9 +351,7 @@ def arena_duel(
         winner_xp = int(bet_coins * 0.1)  # 10% of bet
         loser_xp = max(1, int(bet_coins * 0.02))  # 2% consolation
 
-        winner_xp_result = add_xp(
-            guild_id, winner_id, winner_xp, "duel_win", conn=conn
-        )
+        winner_xp_result = add_xp(guild_id, winner_id, winner_xp, "duel_win", conn=conn)
         loser_xp_result = add_xp(
             guild_id, loser_id, loser_xp, "duel_consolation", conn=conn
         )
@@ -355,127 +382,64 @@ def arena_duel(
         conn.close()
 
 
-def get_capture_stats(guild_id: str, user_id: str) -> dict:
-    """Get capture statistics for a user."""
+def _get_game_stats(
+    guild_id: str,
+    user_id: str,
+    win_kind: str,
+    loss_kind: str,
+    count_key: str,
+) -> dict:
+    """Agrège les statistiques d'un jeu à partir de la table transactions."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        # Get win count
         cursor.execute(
             """
-            SELECT COUNT(*) FROM transactions
-            WHERE guildId = ? AND userId = ? AND kind = 'capture_win'
+            SELECT
+                COALESCE(SUM(CASE WHEN kind = ? THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN kind = ? THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN kind = ? THEN amount ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN kind = ? THEN ABS(amount) ELSE 0 END), 0)
+            FROM transactions
+            WHERE guildId = ? AND userId = ? AND kind IN (?, ?)
             """,
-            (str(guild_id), str(user_id)),
+            (
+                win_kind,
+                loss_kind,
+                win_kind,
+                loss_kind,
+                str(guild_id),
+                str(user_id),
+                win_kind,
+                loss_kind,
+            ),
         )
-        wins = cursor.fetchone()[0]
+        wins, losses, total_winnings, total_losses = cursor.fetchone()
 
-        # Get loss count
-        cursor.execute(
-            """
-            SELECT COUNT(*) FROM transactions
-            WHERE guildId = ? AND userId = ? AND kind = 'capture_loss'
-            """,
-            (str(guild_id), str(user_id)),
-        )
-        losses = cursor.fetchone()[0]
-
-        # Get total winnings
-        cursor.execute(
-            """
-            SELECT COALESCE(SUM(amount), 0) FROM transactions
-            WHERE guildId = ? AND userId = ? AND kind = 'capture_win'
-            """,
-            (str(guild_id), str(user_id)),
-        )
-        total_winnings = cursor.fetchone()[0]
-
-        # Get total losses
-        cursor.execute(
-            """
-            SELECT COALESCE(SUM(ABS(amount)), 0) FROM transactions
-            WHERE guildId = ? AND userId = ? AND kind = 'capture_loss'
-            """,
-            (str(guild_id), str(user_id)),
-        )
-        total_losses = cursor.fetchone()[0]
-
-        total_attempts = wins + losses
-        win_rate = (wins / total_attempts * 100) if total_attempts > 0 else 0
-        net_profit = total_winnings - total_losses
+        wins = int(wins)
+        losses = int(losses)
+        total = wins + losses
+        win_rate = (wins / total * 100) if total > 0 else 0
 
         return {
-            "attempts": total_attempts,
+            count_key: total,
             "wins": wins,
             "losses": losses,
             "win_rate": round(win_rate, 1),
             "total_winnings": total_winnings,
             "total_losses": total_losses,
-            "net_profit": net_profit,
+            "net_profit": total_winnings - total_losses,
         }
     finally:
         conn.close()
+
+
+def get_capture_stats(guild_id: str, user_id: str) -> dict:
+    """Get capture statistics for a user."""
+    return _get_game_stats(guild_id, user_id, "capture_win", "capture_loss", "attempts")
 
 
 def get_duel_stats(guild_id: str, user_id: str) -> dict:
     """Get duel statistics for a user."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    try:
-        # Get win count
-        cursor.execute(
-            """
-            SELECT COUNT(*) FROM transactions
-            WHERE guildId = ? AND userId = ? AND kind = 'duel_win'
-            """,
-            (str(guild_id), str(user_id)),
-        )
-        wins = cursor.fetchone()[0]
-
-        # Get loss count
-        cursor.execute(
-            """
-            SELECT COUNT(*) FROM transactions
-            WHERE guildId = ? AND userId = ? AND kind = 'duel_loss'
-            """,
-            (str(guild_id), str(user_id)),
-        )
-        losses = cursor.fetchone()[0]
-
-        # Get total winnings
-        cursor.execute(
-            """
-            SELECT COALESCE(SUM(amount), 0) FROM transactions
-            WHERE guildId = ? AND userId = ? AND kind = 'duel_win'
-            """,
-            (str(guild_id), str(user_id)),
-        )
-        total_winnings = cursor.fetchone()[0]
-
-        # Get total losses
-        cursor.execute(
-            """
-            SELECT COALESCE(SUM(ABS(amount)), 0) FROM transactions
-            WHERE guildId = ? AND userId = ? AND kind = 'duel_loss'
-            """,
-            (str(guild_id), str(user_id)),
-        )
-        total_losses = cursor.fetchone()[0]
-
-        total_duels = wins + losses
-        win_rate = (wins / total_duels * 100) if total_duels > 0 else 0
-        net_profit = total_winnings - total_losses
-
-        return {
-            "duels": total_duels,
-            "wins": wins,
-            "losses": losses,
-            "win_rate": round(win_rate, 1),
-            "total_winnings": total_winnings,
-            "total_losses": total_losses,
-            "net_profit": net_profit,
-        }
-    finally:
-        conn.close()
+    return _get_game_stats(guild_id, user_id, "duel_win", "duel_loss", "duels")
