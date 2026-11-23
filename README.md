@@ -1,5 +1,17 @@
 # ISROBOT - Discord & GameVox Bot
 
+> [!IMPORTANT]
+> **Cette version Python n'est plus maintenue.** Le bot continue en Rust :
+> **[isoura4/ISROBOT_rust](https://github.com/isoura4/ISROBOT_rust)**.
+>
+> La version Rust reprend la même base SQLite, le même `.env` et les mêmes traductions :
+> pour migrer, pointez `db_path` vers votre `database.sqlite3` actuel et lancez le bot Rust
+> (une sauvegarde de la base est faite automatiquement au démarrage).
+> Elle ajoute une interface web d'administration (OAuth2 Discord) et des binaires / une
+> image Docker prêts à l'emploi. Le minijeu et la modération n'y sont plus inclus.
+>
+> *This Python version is no longer maintained; development continues in Rust at the link above.*
+
 A feature-rich bot built with Python and discord.py, compatible with both Discord and GameVox platforms. Offers various interactive commands, mini-games, Twitch stream notifications, and AI integration.
 
 ## Features
